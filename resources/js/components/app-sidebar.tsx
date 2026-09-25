@@ -1,5 +1,11 @@
-import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import {
+    BookOpen,
+    FolderGit2,
+    GitCompareArrows,
+    LayoutGrid,
+} from 'lucide-react';
+import MatchingQueueController from '@/actions/App/Http/Controllers/Admin/Catalogue/MatchingQueueController';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -24,6 +30,15 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
+/** Staff console entries: only rendered for staff (`auth.user.is_staff`); the server enforces each permission. */
+const staffNavItems: NavItem[] = [
+    {
+        title: 'Catalogue matching',
+        href: MatchingQueueController.index(),
+        icon: GitCompareArrows,
+    },
+];
+
 const footerNavItems: NavItem[] = [
     {
         title: 'Repository',
@@ -38,6 +53,8 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const isStaff = usePage().props.auth.user?.is_staff === true;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -53,7 +70,13 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain
+                    items={
+                        isStaff
+                            ? [...mainNavItems, ...staffNavItems]
+                            : mainNavItems
+                    }
+                />
             </SidebarContent>
 
             <SidebarFooter>
