@@ -3,41 +3,48 @@
 /**
  * Scoring services are pure: immutable inputs, typed results, no database,
  * no facades, no clock, no randomness (docs/adr/0004, 0010).
+ *
+ * One arch() per namespace: with several targets in one expectation, Pest's
+ * negated `toUse` only fails when every target violates the rule (verified
+ * with a planted violation on 2026-09-25).
  */
-arch('scoring services do not touch the database, facades, the clock or randomness')
-    ->expect([
-        'App\Domain\Offers\Ranking',
-        'App\Domain\Pricing\LandedPrice',
-        'App\Domain\Pricing\MarketStats',
-        'App\Domain\Pricing\History',
-        'App\Domain\Pricing\Confidence',
-        'App\Domain\Pricing\Currency\CurrencyConversion',
-        'App\Domain\Merchants\Trust',
-        'App\Domain\Merchants\Risk',
-        'App\Domain\Catalog\Completeness',
-        'App\Domain\Compliance\ComplianceStatus',
-        'App\Domain\Compliance\ComplianceDecision',
-        'App\Domain\Shared',
-        'App\Domain\Shared\Text',
-        'App\Domain\Matching\Engine',
-        'App\Domain\Feeds\Mapping',
-        'App\Domain\Feeds\Normalisation',
-        'App\Domain\Feeds\Validation',
-    ])
-    ->not->toUse([
-        'App\Models',
-        'Illuminate\Database',
-        'Illuminate\Support\Facades',
-        'Illuminate\Support\Carbon',
-        'Carbon\Carbon',
-        'now',
-        'today',
-        'time',
-        'microtime',
-        'rand',
-        'mt_rand',
-        'random_int',
-    ]);
+foreach ([
+    'App\Domain\Offers\Ranking',
+    'App\Domain\Pricing\LandedPrice',
+    'App\Domain\Pricing\MarketStats',
+    'App\Domain\Pricing\History',
+    'App\Domain\Pricing\Confidence',
+    'App\Domain\Pricing\Anomalies',
+    'App\Domain\Pricing\Currency\CurrencyConversion',
+    'App\Domain\Merchants\Trust',
+    'App\Domain\Merchants\Risk',
+    'App\Domain\Catalog\Completeness',
+    'App\Domain\Compliance\ComplianceStatus',
+    'App\Domain\Compliance\ComplianceDecision',
+    'App\Domain\Shared',
+    'App\Domain\Shared\Text',
+    'App\Domain\Matching\Engine',
+    'App\Domain\Feeds\Mapping',
+    'App\Domain\Feeds\Normalisation',
+    'App\Domain\Feeds\Validation',
+] as $pureNamespace) {
+    arch("{$pureNamespace} does not touch the database, facades, the clock or randomness")
+        ->expect($pureNamespace)
+        ->not->toUse([
+            'App\Models',
+            'Illuminate\Database',
+            'Illuminate\Support\Facades',
+            'Illuminate\Support\Carbon',
+            'Carbon\Carbon',
+            'now',
+            'today',
+            'time',
+            'microtime',
+            'rand',
+            'mt_rand',
+            'random_int',
+        ]);
+}
 
 arch('scoring results and inputs are immutable')
     ->expect([
