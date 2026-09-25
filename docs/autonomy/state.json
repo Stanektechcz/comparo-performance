@@ -4,23 +4,20 @@
     "current_slice": "search-and-discovery",
     "branch": "phase-3/search",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "P3-04 search engine port + documents (06f05ef); P3-10/P3-11 multi-currency fixes (a07fd8b, 5e60689)",
-    "next_task": "Integrate P3-05 (indexing), P3-06/07 (search page, suggest, analytics), P3-08 (arch rules); then Phase 3 review council + Gate C + merge",
+    "last_completed_task": "P3-02..P3-08, P3-10, P3-11 implemented; integration fixes cd15292 (cached Money, deterministic snapshot, lint exit code)",
+    "next_task": "P3-09 review council (security, architecture+QA, performance, frontend) -> fixes -> docs (ADR-0016, matrices) -> Gate C on SQLite + PostgreSQL -> merge phase-3/search into main -> Phase 4 (reviews, orders, purchase verification)",
     "blocked_tasks": [],
     "active_agents": [
-        "P3-05 indexing (task-deep)",
-        "P3-06/07 search UI + analytics (task-deep)",
-        "P3-08 architecture rules (task-build)"
+        "Phase 3 review council: security, architecture+QA, performance, frontend"
     ],
     "last_full_test_result": {
         "date": "2026-09-25",
-        "driver": "sqlite + pgsql 18 (embedded)",
-        "tests": 1298,
-        "assertions": {
-            "sqlite": 7247,
-            "pgsql": 7244
-        },
-        "result": "passed"
+        "driver": "sqlite",
+        "tests": 1729,
+        "passed": 1718,
+        "skipped": 11,
+        "assertions": 9381,
+        "result": "passed (Meilisearch contract cases skipped: no server)"
     },
     "static_analysis": {
         "pint": "passed",
@@ -29,7 +26,7 @@
     },
     "frontend": {
         "types_check": "passed",
-        "lint": "passed (1 warning: parity exporter)",
+        "lint": "passed (exit 0)",
         "build_ssr": "passed"
     },
     "parity_fixtures": "current",
