@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveMarket;
+use App\Http\Middleware\ResolveMerchantContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -31,6 +33,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->api(append: [
             ResolveMarket::class,
+        ]);
+
+        $middleware->alias([
+            'feature' => EnsureFeatureEnabled::class,
+            'merchant.context' => ResolveMerchantContext::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

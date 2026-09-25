@@ -123,6 +123,40 @@ composer run dev          # app server, queue listener, logs and Vite (php artis
 | JS/TS lint + format | `npm run check` |
 | Everything CI runs | `composer ci:check` |
 
+### Prototype integrity
+
+`php artisan comparo:verify-prototype` fails when any file listed in `docs/prototype/SHA256SUMS`
+is missing or changed. Git stores those files byte-for-byte (`-text` in `.gitattributes`).
+
+### Verifying against PostgreSQL without Docker
+
+CI runs the suite on PostgreSQL 16. Locally, without Docker or a system install:
+
+1. In a scratch directory **outside the repository**: `npm install embedded-postgres pg`.
+2. Start a throwaway server with UTF-8 databases. `initdb` inherits the Windows locale (for example
+   WIN1250), so create the databases explicitly:
+   `CREATE DATABASE comparo_test ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0`.
+3. Run the suite with the bundled driver enabled (`pdo_pgsql` is present in `C:\php\ext` but disabled
+   in `php.ini`):
+
+```bash
+DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=55432 DB_DATABASE=comparo_test \
+DB_USERNAME=comparo DB_PASSWORD=comparo php -d extension=pdo_pgsql artisan test --compact
+```
+
+4. Stop the server; if the Node wrapper is killed, stop orphaned `postgres.exe` children by PID
+   after checking their command line points into the scratch directory.
+
+### Long-running queues (feed import, matching, pricing)
+
+Phase 2 feed jobs run up to 900s. They dispatch onto the `redis-long` / `database-long` connections
+(config/queue.php), whose `retry_after` (`QUEUE_LONG_RETRY_AFTER`, default 960s) is kept above every
+job's timeout so a worker never picks up a duplicate of a still-running job. `config('comparo.queues.long_running_connection')`
+is what job classes should read (`QUEUE_LONG_CONNECTION`, falling back to `QUEUE_CONNECTION`); tests
+set `QUEUE_CONNECTION=sync`, so these jobs run inline in the suite with no extra setup. In production,
+Horizon runs three dedicated supervisors on `redis-long` (config/horizon.php): `feed-import` (900s),
+`matching` (300s), `pricing` (300s), alongside the existing `default` queue's supervisor.
+
 ## 7. Prototype parity fixtures
 
 ```bash

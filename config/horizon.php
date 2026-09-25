@@ -210,6 +210,51 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+
+        // Phase 2 feed pipeline (docs/architecture/phase-2-feeds-matching.md §5).
+        // Each timeout stays below config/queue.php's redis-long retry_after (960s)
+        // so a worker never picks up a duplicate copy of a still-running job.
+        'supervisor-feed-import' => [
+            'connection' => 'redis-long',
+            'queue' => ['feed-import'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 900,
+            'nice' => 0,
+        ],
+
+        'supervisor-matching' => [
+            'connection' => 'redis-long',
+            'queue' => ['matching'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 1,
+            'timeout' => 300,
+            'nice' => 0,
+        ],
+
+        'supervisor-pricing' => [
+            'connection' => 'redis-long',
+            'queue' => ['pricing'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 1,
+            'timeout' => 300,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -219,11 +264,35 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-feed-import' => [
+                'maxProcesses' => 4,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+            'supervisor-matching' => [
+                'maxProcesses' => 4,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+            'supervisor-pricing' => [
+                'maxProcesses' => 4,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
         ],
 
         'local' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,
+            ],
+            'supervisor-feed-import' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-matching' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-pricing' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],

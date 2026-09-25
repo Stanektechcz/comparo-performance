@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Domain\Accounts\Authorization\Permission;
+use App\Domain\Merchants\MerchantContext;
+use App\Domain\Platform\Features\FeatureFlags;
 use App\Domain\Platform\Markets\MarketContext;
 use App\Http\Presenters\MarketPresenter;
 use App\Models\User;
@@ -48,6 +50,10 @@ class HandleInertiaRequests extends Middleware
             ],
             'market' => fn (): array => app(MarketPresenter::class)->shared(app(MarketContext::class)),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'features' => fn (): array => app(FeatureFlags::class)->clientFlags(),
+            'merchantContext' => fn (): ?array => app()->bound(MerchantContext::class)
+                ? app(MerchantContext::class)->toArray()
+                : null,
         ];
     }
 

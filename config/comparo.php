@@ -34,6 +34,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Queues
+    |--------------------------------------------------------------------------
+    |
+    | Long-running feed/matching/pricing jobs dispatch onto this connection
+    | (config/queue.php: redis-long / database-long). Defaults to whatever
+    | the app's normal queue connection is, so tests (QUEUE_CONNECTION=sync)
+    | run them synchronously without extra setup.
+    |
+    */
+
+    'queues' => [
+        'long_running_connection' => env('QUEUE_LONG_CONNECTION', env('QUEUE_CONNECTION', 'database')),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Demo data
     |--------------------------------------------------------------------------
     |
