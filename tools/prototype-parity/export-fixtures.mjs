@@ -887,7 +887,8 @@ function exportMatchingSynthetic({ seed, context }) {
     ];
 
     return cases.map(([name, fields, productIds = null], index) => {
-        const item = { id: `syn-${index + 1}`, ...fields };
+        // Object.assign: `fields` is a plain object literal (the linter cannot infer that from the tuple).
+        const item = Object.assign({ id: `syn-${index + 1}` }, fields);
 
         return {
             name,

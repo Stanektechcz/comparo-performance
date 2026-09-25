@@ -22,7 +22,9 @@ void createInertiaApp({
     title: pageTitle,
     layout: (name) => {
         switch (true) {
-            case name === 'home' || name.startsWith('catalog/'):
+            case name === 'home' ||
+                name.startsWith('catalog/') ||
+                name.startsWith('search/'):
                 return PublicLayout;
             case name.startsWith('auth/'):
                 return AuthLayout;

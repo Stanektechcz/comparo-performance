@@ -15,7 +15,8 @@ use Tests\Support\CatalogScenario;
 beforeEach(function () {
     $this->freezeTime();
     $this->catalog = CatalogScenario::create();
-    $this->product = $this->catalog->product();
+    // Deterministic catalogue facts: completeness (the quality factor) must not depend on faker text length.
+    $this->product = $this->catalog->product(['description' => str_repeat('A complete, deterministic product description. ', 4)]);
     $this->catalog->allow($this->product, 'CZ');
 
     // Identical merchants apart from their currency, shipping for free to CZ,

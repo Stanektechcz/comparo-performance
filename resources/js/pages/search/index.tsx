@@ -25,7 +25,6 @@ import { SearchResultList } from '@/components/search/search-results';
 import { searchUrl, textSearchUrl } from '@/components/search/search-url';
 import { SeoHead } from '@/components/seo/seo-head';
 import { useMarket } from '@/hooks/use-shared-props';
-import PublicLayout from '@/layouts/public-layout';
 import { catalogUrls } from '@/lib/catalog-urls';
 import { formatNumber, pluralize } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -399,5 +398,3 @@ export default function SearchPage(props: SearchPageProps) {
         </>
     );
 }
-
-SearchPage.layout = PublicLayout;

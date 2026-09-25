@@ -57,3 +57,6 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | F-09 | MINOR | `merchant_products.missing_run_count` is a tinyint without an overflow guard (derived count) | clamp at the column maximum |
 | F-10 | MINOR | The staff sidebar entry "Catalogue matching" is shown to any staff member; staff without `matching.review` get a 403 | share fine-grained staff capability flags in HandleInertiaRequests (Phase 8 staff console) |
 | F-11 | MINOR | The product page's where-to-buy section does not yet show the new shipping-unavailable count (offers excluded because no exchange rate exists) | next public product-page touch (P3-06 or Phase 17) |
+| F-12 | MINOR | Product variant and ingredient_product link changes do not enqueue search re-indexing | add hooks when catalogue editing arrives (Phase 8) |
+| F-13 | MINOR | Every offer publish now also writes one outbox row (extra DB work per feed item) | batch outbox writes per publish chunk (Phase 16 performance) |
+| F-14 | MINOR | The queued full re-index does not remove orphaned documents (the swap rebuild does) | orphan sweep in the full re-index job |

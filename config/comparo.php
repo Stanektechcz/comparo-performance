@@ -122,6 +122,13 @@ return [
             // category, ingredient or market change fans out to many products.
             'fan_out_chunk' => 500,
         ],
+        // Search analytics retention (D-09 defaults; docs/privacy/data-retention.md).
+        'analytics' => [
+            'session_hash_days' => 90,
+            'raw_retention_months' => 13,
+            'click_window_minutes' => 30,
+            'min_demand_sessions' => 3,
+        ],
     ],
 
     /*

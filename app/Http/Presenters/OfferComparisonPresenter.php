@@ -34,7 +34,7 @@ final class OfferComparisonPresenter
      * Cache format tokens: bumped whenever a presented shape changes, so an
      * entry cached before a deploy is never served in the old shape.
      */
-    private const string PAGE_FORMAT = 'page-v2';
+    private const string PAGE_FORMAT = 'page-v3';
 
     private const string API_FORMAT = 'api-v1-r2';
 
@@ -52,7 +52,7 @@ final class OfferComparisonPresenter
      */
     public function forPage(Product $product, MarketContext $market, DateTimeImmutable $now): array
     {
-        return $this->cached($product, $market, $now, self::PAGE_FORMAT, fn (OfferComparison $comparison): array => [
+        $page = $this->cached($product, $market, $now, self::PAGE_FORMAT, fn (OfferComparison $comparison): array => [
             'compliance' => self::compliance($comparison->compliance),
             'offers' => array_map(fn (ComparedOffer $offer): array => $this->offerRow($offer, $comparison), $comparison->offers),
             'offerSummary' => [
@@ -64,8 +64,30 @@ final class OfferComparisonPresenter
                 'lowestTotal' => MoneyPresenter::present($comparison->lowestTotal),
                 'bestValueOfferId' => $comparison->bestValueOfferId,
             ],
-            'topEligibleTotal' => $this->topEligibleTotal($comparison),
+            // Cached as scalars: stores that serialize values refuse objects (cache.serializable_classes = false).
+            'topEligibleTotal' => self::moneyScalars($this->topEligibleTotal($comparison)),
         ]);
+
+        $page['topEligibleTotal'] = self::moneyFromScalars($page['topEligibleTotal']);
+
+        return $page;
+    }
+
+    /**
+     * @return array{minor: int, currency: string}|null
+     */
+    private static function moneyScalars(?Money $money): ?array
+    {
+        return $money === null ? null : ['minor' => $money->minor, 'currency' => $money->currency];
+    }
+
+    private static function moneyFromScalars(mixed $scalars): ?Money
+    {
+        if (! is_array($scalars) || ! is_int($scalars['minor'] ?? null) || ! is_string($scalars['currency'] ?? null)) {
+            return null;
+        }
+
+        return Money::of($scalars['minor'], $scalars['currency']);
     }
 
     /**
