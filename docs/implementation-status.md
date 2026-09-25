@@ -3,12 +3,12 @@
 Updated 2026-09-25 (end of the Phase 0 + first Phase 1 slice run). Status values only:
 NOT STARTED · IN PROGRESS · FUNCTIONAL · PARITY VERIFIED · PRODUCTION HARDENED.
 Nothing below is PRODUCTION HARDENED yet: no production deployment, load test or security audit exists.
+No browser (manual or automated E2E) verification of authenticated merchant/staff pages has been run yet
+for the Phase 2 feeds/matching UI — coverage below is Pest Feature/Unit tests only.
 
-**Quality gates at the end of this run** (see the final section for exact commands): Pest 136 tests /
-2 715 assertions green on SQLite **and** on PostgreSQL 18.4 (embedded, local; CI uses PostgreSQL 16),
-Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean, `npm run types:check` /
-`check` / `build` / `build:ssr` green, SSR server-renders the product page body. Prototype files:
-137/137 SHA-256 unchanged.
+**Quality gates:** to be refreshed at Gate C (the orchestrator fills in current Pest/assertion counts,
+Pint/Larastan/parity/`npm` results and the prototype-file checksum count once the Phase 2 backend
+refactor in progress lands).
 
 ## Modules
 
@@ -19,7 +19,7 @@ Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean, `np
 | Markets / geography | 27 markets, 12 currencies | countries, currencies, exchange_rates (dated) | `?market=` everywhere | market selector (cookie) | MarketSelectionTest | FUNCTIONAL | rates are demo (fixed, prototype); no ECB import job |
 | Canonical catalogue | products, brands, categories, variants, doses | products (+merge fields), variants, ingredients, ingredient_product | via product pages | product/brand/category pages | ProductPageTest, CatalogPagesTest | FUNCTIONAL | merge *workflow* (staff action + audit) not built; only the 301 for merged products |
 | Merchants | shops, zones, trust inputs, risk | merchants, merchant_user, shipping zones, trust signals (append-only), risk events | merchant offers API (read-only) | shop pages | MerchantIsolationTest | FUNCTIONAL | merchant dashboard UI (Phase 7) |
-| Offers & coupons | offers, coupons, coupon states | merchant_products, offers, coupons, coupon_country | public offers API | offer table/cards | ProductPageTest | FUNCTIONAL | feed ingestion (Phase 2); coupon reports workflow |
+| Offers & coupons | offers, coupons, coupon states | merchant_products, offers, coupons, coupon_country | public offers API | offer table/cards | ProductPageTest | FUNCTIONAL | feed ingestion now built (see "Feeds & matching" below); coupon reports workflow still absent |
 | Total landed price | `offerRow` | LandedPriceCalculator (integer arithmetic) | yes | yes | LandedPriceParityTest (7 209 cases), unit tests | PARITY VERIFIED | per-basket shipping (basket optimiser) not ported |
 | ComparoRank | `rank(ctx)` | RankingService, versioned `ranking_versions` | yes (breakdown, version) | "Why this rank?" dialog | RankingParityTest (3 239 + 21), DatabaseParityTest, RankingPurityTest | PARITY VERIFIED | weight-change action (audited activation) not built |
 | Trust Score / Risk | `trust(m)`, `risk(m)` | TrustService, RiskService, MerchantScores | trust only (public signals) | trust badge/dialog | MerchantScoresParityTest | PARITY VERIFIED | trust inputs are imported demo measurements; real measurement jobs pending |
@@ -31,9 +31,15 @@ Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean, `np
 | SEO head / SSR | per-page meta, JSON-LD | SeoPresenter; Blade fallback + Inertia `<Head>` | — | seo-head | ProductPageTest (SEO head) | FUNCTIONAL | sitemaps, robots route, llms.txt, RSS, hreflang per market (Phase 12) |
 | Demo data | all seeds | PrototypeSnapshotImporter + Demo*Seeders (time-anchored, idempotent) | — | — | DemoDataSeederTest | FUNCTIONAL | only Phase 1 entities imported |
 | Parity harness | intel.js, HTML engines | tools/prototype-parity/export-fixtures.mjs | — | — | `--check` in CI | FUNCTIONAL | reviews, matching, dosing, delivery fixtures exported but not yet ported |
-| Audit log | `S.auditLog` | audit_logs (append-only, DB trigger) | — | — | AppendOnlyHistoryTest | IN PROGRESS | no AuditLogger service and no audited privileged action exists yet |
+| Audit log | `S.auditLog` | `Platform\Audit\AuditLogger`/`AuditRedactor`, `AuditAction` (18 cases); audit_logs (append-only, DB trigger, actor FK decoupled from `users` — ADR-0014) | — | — | AppendOnlyHistoryTest; assertions inline in Feeds/Matching Feature tests | FUNCTIONAL | no dedicated audit-log viewer page yet; only Feeds/Matching actions are audited so far, not every privileged action platform-wide |
+| Feature flags | — (new, A-17) | `Platform\Features\{Feature,FeatureFlags}`, config-backed (`config/features.php`), fail-closed via `feature:` route middleware | shared Inertia prop (`clientFlags()`) | gates `/merchant/*` (404 when off) | route-level feature tests | FUNCTIONAL | config-only (no DB-backed store); Pennant deferred |
 | Search | search, synonyms, facets | Scout + meilisearch-php installed, config only | — | — | — | NOT STARTED | Phase 3 |
-| Feeds & matching | Feed Match Center | — | — | — | fixtures only | NOT STARTED | Phase 2 (next slice) |
+| Feeds & matching (pipeline) | Feed Match Center | `App\Domain\Feeds\**`, `App\Domain\Matching\**` (see `docs/modules/{feeds,matching}.md`) | — | — | `tests/Feature/Feeds/**`, `tests/Feature/Matching/**`, `tests/Architecture/{FeedJobsTest,MatchingBoundariesTest}.php` | FUNCTIONAL (matching engine itself: **PARITY VERIFIED**, see below) | purchase links still go directly to merchants until Phase 5; feed-level shipping stored raw only (D-07); availability-map editing not in the merchant form; `api_push` transport not implemented; canonical-product creation from an approved candidate deferred to Phase 8; no notification on run completion/failure |
+| Matching engine (`intel.js` Engine 2.0 port) | `matchItem` / Product Matching Engine 2.0 | `Matching\Engine\ProductMatcher` + `MatchingPolicy` (`matching_policies`, versioned) | — | — | `tests/Unit/Matching/ProductMatcherTest.php`, `tests/Unit/Parity/{MatchingParityTest,MatchingSensitivityTest}.php`, `tests/Feature/Parity/DatabaseMatchingParityTest.php` | PARITY VERIFIED | candidate narrowing is a documented deviation (ADR-0012 #3), proven bounded on the full catalogue |
+| Merchant portal — feeds | (simulated in prototype only) | `Feeds\Actions\**` behind `FeedSourcePolicy` | — | `resources/js/pages/merchant/feeds/**` | `tests/Feature/Merchant/MerchantFeedsTest.php`, `tests/Feature/Feeds/**` | FUNCTIONAL | no dedicated notification on run completion/failure |
+| Merchant portal — matching | (simulated in prototype only) | `Matching\Queries\MerchantMatchingQueue`, `Matching\Actions\{DecideMatch,ProposeProductCandidate}` behind `MerchantProductPolicy` | — | `resources/js/pages/merchant/matching/**` | `tests/Feature/Merchant/MerchantMatchingTest.php`, `tests/Feature/Matching/**` | FUNCTIONAL | — |
+| Staff console — catalogue matching only | `/intel` admin views | `Admin\Catalogue\{MatchingQueueController,MatchingListingController,ListingDecisionController,ListingRematchController,CandidateResolutionController,ConflictResolutionController,ProductSearchController}` behind `matching.review`(+`offers.manage`) | — | `resources/js/pages/admin/catalogue/matching/**` | `tests/Feature/Admin/CatalogueMatchingTest.php` | FUNCTIONAL | only the matching queue exists in the staff console; no other staff console area is built (merchants, compliance, SEO, etc. remain Phase 8 scope) |
+| Offers write path & events | `PublishOffer`/`RecordPriceSnapshot`/`DeactivateOffer`/`ConfirmListingsSeen`; `OfferPublished`/`OfferDeactivated`/`OfferRelinked`/`PriceChanged`/`ProductMatched` events | `App\Domain\Offers\Actions\**`, `App\Domain\Pricing\Actions\**`, `App\Domain\Platform\Listeners\BumpProductCacheVersion` | — | offer changes visible on next product page view (cache-bumped) | `tests/Feature/Feeds/FeedPublishingTest.php`, event-level assertions across Feeds/Matching Feature tests | FUNCTIONAL | snapshot-writing-inside-transaction amends ADR-0003 (ADR-0013); no dedicated event/notification consumer for `FeedImported`/`FeedFailed` yet |
 | Reviews / verification / orders | reviews, proofs, orders | — (derived ratings imported, labelled) | — | rating summary only | fixtures only | NOT STARTED | Phase 4 |
 | Affiliate redirect & conversions | `#/go`, reconciliation | — | — | purchase links go directly to the merchant URL | — | NOT STARTED | Phase 5 (`/go/{merchant}/{product}`) |
 | Account: saved, compare, basket, alerts | yes | — | — | — | — | NOT STARTED | Phase 6 |
@@ -51,13 +57,16 @@ Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean, `np
 | Commercial money never changes organic rank | closed `RankingFactor` enum, `RankingContext` whitelist, `RankingPurityTest` (incl. `commercial_spend_does_not_change_organic_rank`: signature + schema check), arch test (no Commercial/Affiliate/Models deps) |
 | Compliance before serialization | `ComplianceStatus` policy; blocked → no offers serialized (page, API, JSON-LD); unknown → no purchase links; tests in ProductPageTest / PublicOffersApiTest |
 | Append-only history | model guard + DB triggers (SQLite + PostgreSQL); AppendOnlyHistoryTest |
-| Merchant isolation | scoped `MerchantOffers` query + `OfferPolicy`; MerchantIsolationTest (`merchant_a_cannot_view_merchant_b_offer`, `merchant_a_cannot_edit_merchant_b_offer`, `merchant_cannot_access_internal_risk_score`) |
-| Pure scoring | PureServicesTest (no DB/facades/clock/randomness; readonly DTOs) |
+| Merchant isolation | scoped `MerchantOffers` query + `OfferPolicy`; MerchantIsolationTest (`merchant_a_cannot_view_merchant_b_offer`, `merchant_a_cannot_edit_merchant_b_offer`, `merchant_cannot_access_internal_risk_score`); **now also covers every `/merchant/*` feed and matching route** — `{feed}`/`{run}`/`{listing}` resolved through `MerchantContext`-scoped queries (foreign id → 404) before `FeedSourcePolicy`/`MerchantProductPolicy`, negative tests in `tests/Feature/Merchant/{MerchantFeedsTest,MerchantMatchingTest}.php` including a user who belongs to merchants A and B |
+| Pure scoring | PureServicesTest (no DB/facades/clock/randomness; readonly DTOs); `Matching\Engine\ProductMatcher` and `Shared\Text\TextFold`/`TitleSimilarity` are pure by the same rule |
 | Explicit serialization | presenters/resources only; whitelisted `auth.user`; outbound URLs restricted to http(s) |
+| Audit of privileged actions | `Platform\Audit\AuditLogger::record()` called inside the same transaction as the write it describes (ADR-0014); covers every Feeds/Matching action listed in the "Feeds & matching" row above — no longer "first privileged action, Phase 8" |
+| Matching append-only decisions | Eloquent guard + DB triggers on `matching_decisions` (`Platform\Exceptions\AppendOnlyViolation`), linear chain via `supersedes_id` (ADR-0012) |
+| Price snapshot written inside the publish transaction | `Offers\Actions\PublishOffer` calls `Pricing\Actions\RecordPriceSnapshot` in the same DB transaction, never from a listener (ADR-0013, amends ADR-0003) |
 
 Not yet covered (the entities do not exist yet): `merchant_a_cannot_view_merchant_b_invoice`,
 `merchant_a_cannot_view_merchant_b_api_key` (Phase 10), `restricted_product_cannot_activate_sponsored_campaign`
-(Phase 10), "privileged status change creates an AuditLog" (first privileged action, Phase 8).
+(Phase 10).
 
 ## Commands used for the gates
 

@@ -1,6 +1,7 @@
 # Phase 2 design — merchant feeds + canonical matching
 
-Status: **binding for Phase 2** (2026-09-25). Synthesised from five specialist analyses
+Status: **implemented** (2026-09-25; docs refreshed to match the code, see ADRs 0012–0015). Synthesised
+from five specialist analyses
 (database, feeds, matching, QA/parity, architecture). Where the prototype code and the root specs
 disagree, the code wins (source-of-truth order in `CLAUDE.md`); every deliberate deviation is listed
 in §9 and carried into ADRs 0012–0015.
@@ -14,24 +15,35 @@ review matches and see offers update.
 
 | Namespace | Contents | Purity |
 |---|---|---|
-| `App\Domain\Feeds` | enums (`FeedFormat`, `FeedSourceStatus`, `FeedRunStatus`, `FeedRunOutcome`, `FeedRunTrigger`, `FeedItemValidationStatus`, `FeedItemMatchStatus`, `FeedErrorSeverity`, `FeedErrorCode`) | — |
-| `Feeds\Parsing` | `FeedParser` interface; `CsvFeedParser`, `XmlFeedParser`, `JsonFeedParser`; `ParseOptions`; `RawFeedRow` | stream IO only, no DB |
-| `Feeds\Mapping`, `Feeds\Normalisation`, `Feeds\Validation` | `FieldMapping`, `FeedRowMapper` → `NormalisedFeedItem` \| `RowRejection`; `Gtin`; `FeedItemValidator` | **pure** |
-| `Feeds\Fetching` | `FeedFetcher` (Laravel HTTP client), `DestinationGuard` (pure), `HostResolver` interface | IO |
-| `Feeds\Actions` | `CreateFeedSource`, `SaveFeedMapping`, `UpdateFeedCredentials`, `ChangeFeedSourceStatus`, `StartFeedRun`, `CompleteFeedRun`, `FailFeedRun`, `ReconcileMissingListings` | DB, audited |
-| `Feeds\Jobs`, `Feeds\Queries`, `Feeds\Events` | pipeline jobs; merchant-scoped queries taking `MerchantContext`; `FeedImported`, `FeedFailed` | — |
-| `App\Domain\Matching\Engine` | `ProductMatcher`, `MatchingPolicy` (`prototypeV1()`), DTOs `FeedItemFacts`, `CandidateProduct`, `BrandAlias`, `MatchResult`, `MatchPart`, enums `MatchSignal`, `MatchLevel`, `MatchBucket` | **pure** |
-| `Matching\Queries` | `CandidateProducts` (EAN ∪ brand/alias ∪ brand-in-title narrowing, **ordered by product id**), `ActiveMatchingPolicy`, review-queue queries | DB read |
-| `Matching\Actions` | `MatchListing`, `DecideMatch`, `Rematch`, `ProposeProductCandidate`, `ResolveProductCandidate`, `ResolveConflict` | DB, audited |
+| `App\Domain\Feeds` | enums (`FeedFormat`, `FeedSourceStatus`, `FeedRunStatus`, `FeedRunOutcome`, `FeedRunTrigger`, `FeedItemValidationStatus`, `FeedItemMatchStatus`, `FeedErrorSeverity`, `FeedErrorCode`, `FeedTransport`, `FeedUrlMask`) | — |
+| `Feeds\Parsing` | `FeedParser` interface; `CsvFeedParser`, `XmlFeedParser`, `JsonFeedParser`, `FeedParserFactory`; `ParseOptions`; `RawFeedRow` | stream IO only, no DB |
+| `Feeds\Mapping`, `Feeds\Normalisation`, `Feeds\Validation` | `FieldMapping`, `FeedRowMapper` → `NormalisedFeedItem` \| `RowRejection`; `Gtin`; `FeedItemValidator`, `DuplicateSkuTracker` | **pure** |
+| `Feeds\Fetching` | `FeedFetcher` (Laravel HTTP client), `DestinationGuard` (pure), `HostResolver`/`DnsHostResolver`, `PayloadWriter` | IO |
+| `Feeds\Actions` | `CreateFeedSource`, `UpdateFeedSource`, `SaveFeedMapping`, `UpdateFeedCredentials`, `ChangeFeedSourceStatus`, `StartFeedRun`, `CompleteFeedRun`, `FailFeedRun`, `CancelFeedRun`, `StoreFeedUpload`, `ReconcileMissingListings` | DB, audited |
+| `Feeds\Pipeline` | `FeedRunPipeline` (queue/stage constants), `FeedPayloadImporter`, `FeedItemWriter`, `FeedItemListing`, `MappingResolver`, `FeedStorage`, `FeedSourceSettings` | DB + IO |
+| `Feeds\Lifecycle` | `FeedRunTransitions`, `FeedSourceLifecycle` (compare-and-swap state changes), `FeedActorKind` | DB |
+| `Feeds\Listeners` | `PublishLatestObservation` (queued, reacts to `Matching\Events\ProductMatched`) | DB |
+| `Feeds\Console` | `ScheduleDueFeeds`, `ReapStalledFeedRuns`, `PruneFeedData` (scheduled commands) | DB |
+| `Feeds\Exceptions` | `FeedRunAlreadyActive`, `FeedRunNotAllowed`, `InvalidFeedTransition`, `FeedRunFailure` | — |
+| `Feeds\Jobs`, `Feeds\Queries`, `Feeds\Events` | pipeline jobs (`FetchFeedPayload`, `ParseFeedPayload`, `MatchFeedItems`, `PublishFeedRun`, `FinalizeFeedRun`); merchant-scoped queries taking `MerchantContext`; `FeedImported`, `FeedFailed` | — |
+| `App\Domain\Matching\Engine` | `ProductMatcher`, `MatchingPolicy` (`prototypeV1()`), DTOs `FeedItemFacts`, `CandidateProduct`, `BrandAliasSet`, `MatchResult`, `MatchPart`, `MatchPartLabel`, enums `MatchSignal`, `MatchLevel`, `MatchBucket` | **pure** |
+| `Matching\Queries` | `CandidateProducts` (EAN ∪ brand/alias ∪ brand-in-title narrowing, **ordered by product id**), `ActiveMatchingPolicy`/`ActivePolicy`, `MerchantMatchingQueue`, `StaffMatchingQueue`, `MatchingCatalogue`, `DecisionHistoryEntry` and related review-queue queries | DB read |
+| `Matching\Actions` | `MatchListing`, `DecideMatch`, `Rematch`, `ManualLink`, `ProposeProductCandidate`, `ResolveProductCandidate`, `ResolveConflict`, `ComplianceHolds` | DB, audited |
+| `Matching\Contracts` | `ComplianceHoldCheck` (the only way Matching reads Compliance) | — |
 | `App\Domain\Shared\Text` | `TextFold` (`fold`, `canonical`, `tokens`), `TitleSimilarity` | **pure** |
-| `App\Domain\Offers\Actions` | `UpsertListing` (sole writer of merchant_products identity), `LinkListing`, `PublishOffer`, `DeactivateOffer` | DB |
-| `App\Domain\Pricing\Actions` / `Pricing\History\SnapshotPolicy` | `RecordPriceSnapshot` (sole runtime writer of price_snapshots) / pure reason policy | DB / pure |
-| `App\Domain\Platform\Audit` | `AuditLogger`, `AuditAction`, `AuditActor`, `AuditRedactor` | DB |
-| `App\Domain\Platform\Features` | `Feature` enum, `FeatureFlags` service | config + DB |
+| `App\Domain\Compliance` | `ComplianceDecision`, `ComplianceStatus`, `MarketComplianceHold` (implements `Matching\Contracts\ComplianceHoldCheck` — the adapter Matching depends on) | DB read |
+| `App\Domain\Offers\Actions` | `UpsertListing` (sole writer of merchant_products identity), `LinkListing`, `PublishOffer`, `DeactivateOffer`, `ConfirmListingsSeen` (bulk freshness confirmation for unchanged-checksum runs) | DB |
+| `App\Domain\Pricing\Actions` / `Pricing\History\SnapshotPolicy` | `RecordPriceSnapshot` (sole runtime writer of price_snapshots), `RecheckProductAnomalies` (re-flags anomalies after a publish) / pure reason policy | DB / pure |
+| `App\Domain\Pricing\Anomalies` | `PriceAnomalyDetector`, `PriceAnomalyFinding` (pure detection used by `RecheckProductAnomalies`) | **pure** |
+| `App\Domain\Platform\Audit` | `AuditLogger`, `AuditAction`, `AuditActor`, `AuditRedactor`, `AuditChanges` | DB |
+| `App\Domain\Platform\Features` | `Feature` enum, `FeatureFlags` service — **config-only** (reads `config('features.*')`; no DB-backed store, Pennant deferred) | config |
 | `App\Domain\Merchants\MerchantContext` | active merchant + role (session-selected) | — |
 
-**Allowed dependencies:** Feeds → Matching\Actions, Offers\Actions, Compliance queries, Shared.
-Matching → Catalog queries, Offers\Actions, Shared. Offers\Actions → Pricing\Actions.
+**Allowed dependencies:** Feeds → Matching\Actions, Matching\Events, Matching\Contracts,
+`ListingMatchStatus`, Offers\Actions, Pricing\Actions, `Pricing\History\SnapshotSource`, Compliance
+queries, Shared. Matching → Catalog queries, Offers\Actions, Platform\Audit, Platform\Features, Shared.
+Compliance → Matching\Contracts (implements `ComplianceHoldCheck`, does not depend on Matching).
+Offers\Actions → Pricing\Actions.
 **Forbidden:** Matching → Feeds; Offers/Pricing → Feeds/Matching; Feeds → `Pricing\LandedPrice`,
 `Offers\Ranking`, `PriceSnapshot`; `Matching\Engine` → anything but Shared; any Commercial/Affiliate
 input into Matching or Ranking. Enforced by `tests/Architecture`.
@@ -64,11 +76,13 @@ merchant-zone based, D-07), `updated_at`. Money parsed from decimal strings into
 **Error taxonomy (`FeedErrorCode`)** — run-fatal: `UNREACHABLE_URL`, `HTTP_ERROR`, `FETCH_TIMEOUT`,
 `BLOCKED_DESTINATION`, `AUTH_FAILED`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_CONTENT_TYPE`,
 `UNSUPPORTED_ENCODING`, `PARSER_ERROR`, `EMPTY_FEED`, `ROW_LIMIT_EXCEEDED`,
-`REJECT_THRESHOLD_EXCEEDED`, `STALLED`. Row-reject: `MISSING_SKU`, `MISSING_REQUIRED_FIELD`,
+`REJECT_THRESHOLD_EXCEEDED`, `STALLED`, `FETCH_DISABLED` (the `feed-url-fetch` feature flag is off),
+`INTERNAL_ERROR` (unexpected exception, never leaks internals to the merchant). Row-reject: `MISSING_SKU`, `MISSING_REQUIRED_FIELD`,
 `INVALID_PRICE`, `INVALID_CURRENCY`, `INVALID_AVAILABILITY`, `INVALID_URL`, `DUPLICATE_SKU` (first
 wins), `SKU_OWNED_BY_OTHER_SOURCE`, `FIELD_TOO_LONG`, `IMPOSSIBLE_DISCOUNT`. Row-warning (still
 published): `INVALID_GTIN`, `MISSING_GTIN`, `UNKNOWN_BRAND`, `INVALID_STOCK`, `INVALID_IMAGE_URL`,
-`URL_DOMAIN_MISMATCH`. Match outcomes are statuses, not errors (`UNMATCHED_PRODUCT` is shown as a
+`URL_DOMAIN_MISMATCH`. `MASS_REMOVAL_HELD` (§7) marks a run-level warning when reconciliation withholds
+a mass deactivation. Match outcomes are statuses, not errors (`UNMATCHED_PRODUCT` is shown as a
 status with an action). Every code has a merchant-facing, actionable message in `lang/en/feeds.php`.
 
 ## 4. State machines
@@ -84,18 +98,24 @@ status with an action). Every code has a merchant-facing, actionable message in 
 
 ## 5. Pipeline (queues `feed-import`, `matching`, `pricing`)
 
-`StartFeedRun` (idempotency key `schedule:{source}:{slot}` / `manual:{uuid}`; one active run per
-source) → `FetchFeedPayload` (SSRF guard, streamed to the private disk with sha256; unchanged checksum
-→ complete as `unchanged`) → `ParseFeedPayload` (deletes its own staging rows first, so re-runnable) →
-`NormaliseFeedItems` (validation, duplicate SKUs, reject threshold 20 % → failed
-`REJECT_THRESHOLD_EXCEEDED`, nothing published) → `MatchFeedItems` (reuse the listing's current
-decision when its facts fingerprint is unchanged; otherwise `Matching\Actions\MatchListing`; compliance
-hold when the product is blocked in the feed market) → `PublishFeedRun` (one transaction per chunk,
-`published_at` guard; `UpsertListing` + `PublishOffer` for auto/confirmed matches; then
-`ReconcileMissingListings`) → `FinalizeFeedRun` (metrics, source state, `FeedImported`/`FeedFailed`).
-Every job: `tries`, `timeout`, `backoff()`, failure transition, ids only in payloads, correlation id
-restored into `Context`. Queue `retry_after` must exceed the longest job timeout (dedicated
-connection settings + Horizon supervisors per queue).
+Five jobs, not six: `StartFeedRun` (idempotency key `schedule:{source}:{slot}` / `manual:{uuid}`; one
+active run per source) → `FetchFeedPayload` (SSRF guard, streamed to the private disk with sha256;
+unchanged checksum → complete as `unchanged`, and confirms freshness on existing listings via
+`Offers\Actions\ConfirmListingsSeen` instead of re-processing) → `ParseFeedPayload` (**stage 2:
+"parsing → normalizing" is one job**, not two — deletes its own staging `feed_items` rows first so it
+is re-runnable, then streams, maps, normalises and validates every row via `FeedPayloadImporter`;
+duplicate SKUs, reject threshold 20% → failed `REJECT_THRESHOLD_EXCEEDED`, nothing published) →
+`MatchFeedItems` (writes the listing identity via `Offers\Actions\UpsertListing` — the sole writer of
+merchant_products identity — then reuses the listing's current decision when its facts fingerprint is
+unchanged, otherwise runs `Matching\Actions\MatchListing`; compliance hold when the product is blocked
+in the feed market) → `PublishFeedRun` (one transaction per chunk, `published_at` guard; `PublishOffer`
+for auto/confirmed matches; then `ReconcileMissingListings`, **then**
+`Pricing\Actions\RecheckProductAnomalies` re-evaluates anomaly flags for every product touched by the
+run) → `FinalizeFeedRun` (metrics, source state, `FeedImported`/`FeedFailed`). There is no separate
+`NormaliseFeedItems` job. Every job: `tries`, `timeout`, `backoff()`, failure transition, ids only in
+payloads, correlation id restored into `Context`. Queue `retry_after` must exceed the longest job
+timeout (dedicated connection settings + Horizon supervisors per queue; queue connection defaults are
+being finalised alongside this doc pass — see `docs/implementation-status.md`).
 
 **Auto-publish:** bucket `auto` (≥ 90) publishes when feature `matching-auto-publish` is on (default
 on in local/testing, configurable); bucket `confirm` (65–89) waits in the review queue unpublished;
@@ -110,19 +130,29 @@ on in local/testing, configurable); bucket `confirm` (65–89) waits in the revi
   day → `scheduled`; otherwise **no row** (same-day re-runs are idempotent).
 - Events (final readonly, ids + scalars, `ShouldDispatchAfterCommit`): `Offers\Events\OfferPublished`,
   `OfferDeactivated`, `OfferRelinked`; `Pricing\Events\PriceChanged` (old/new minor, currency, reason);
-  `Matching\Events\ProductMatched`; `Feeds\Events\FeedImported`, `FeedFailed`.
+  `Matching\Events\ProductMatched` (queued listener `Feeds\Listeners\PublishLatestObservation`);
+  `Feeds\Events\FeedImported`, `FeedFailed`. Full producer/listener/sync-or-queued table:
+  `docs/architecture/event-matrix.md`.
+- Bulk offer writers that are not per-row publishes: `Offers\Actions\ConfirmListingsSeen` (refreshes
+  freshness on an unchanged-checksum run, §5) and `Pricing\Actions\RecheckProductAnomalies` (re-flags
+  price anomalies after a run publishes, using `Pricing\Anomalies\PriceAnomalyDetector`). An
+  unchanged-checksum run writes **no** `scheduled` snapshot for its listings — nothing was observed, so
+  `SnapshotPolicy` never runs for it; only a normally-processed run can produce a `scheduled` row.
 - Cache: a synchronous after-commit listener bumps product versions (both products on relink). The
   existing `Offer::saved` hook stays as a safety net for direct writes but only bumps when the model
   actually changed and defers the bump until after commit.
 
 ## 7. Reconciliation (D-25)
 
-Only published runs count. SKUs owned by the source and absent from the run get
-`missing_run_count++`; deactivate (`is_active=false`, `deactivated_at`,
-`deactivation_reason=missing_from_feed`) after 2 consecutive misses or 7 days unseen (config).
-Never delete. Reappearing SKUs reactivate. Mass-removal guard: if one run would deactivate > 50 % of
-the source's active listings, hold the deactivation and finish `published_with_warnings`.
-Unchanged-checksum runs refresh `last_seen_at`/`source_updated_at` (config
+Only published runs count. `merchant_products.missing_run_count` is **derived**, not a raw counter fed
+by an external signal: it is incremented by `ReconcileMissingListings` for a SKU owned by the source and
+absent from the current run, and reset when the SKU reappears. Deactivate (`is_active=false`,
+`deactivated_at`, `deactivation_reason=missing_from_feed`; the reconciliation reason surfaced to the
+merchant is `not_seen`) after 2 consecutive misses or 7 days unseen (config). Never delete. Reappearing
+SKUs reactivate. Mass-removal guard: if one run would deactivate > 50% of the source's active listings,
+hold the deactivation and finish `published_with_warnings` (error code `MASS_REMOVAL_HELD`); sources
+with fewer than `mass_removal_min_offers` = 10 live offers are exempt from the guard. Unchanged-checksum
+runs refresh `last_seen_at`/`source_updated_at` via `Offers\Actions\ConfirmListingsSeen` (config
 `comparo.feeds.unchanged_refreshes_freshness`, default true — the merchant re-served the same data).
 
 ## 8. Security

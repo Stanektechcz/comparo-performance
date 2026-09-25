@@ -19,6 +19,10 @@ acceptance; a changed decision gets a new ADR that supersedes the old one.
 | [0009](0009-money-minor-units.md) | Money as integer minor units | Accepted | Phase 1 (implemented in domain) |
 | [0010](0010-prototype-parity-harness.md) | Prototype parity harness | Accepted | Phase 0 (implemented for 7 engines) |
 | [0011](0011-local-development-without-docker.md) | Local development without Docker | Accepted | Phase 0 |
+| [0012](0012-canonical-matching-engine.md) | Canonical matching engine | Accepted | Phase 2 (parity verified) |
+| [0013](0013-merchant-feed-ingestion-pipeline.md) | Merchant feed ingestion pipeline (amends ADR-0003) | Accepted | Phase 2 (functional) |
+| [0014](0014-audit-logging.md) | Audit logging | Accepted | Phase 2 (functional) |
+| [0015](0015-domain-events-feature-flags-merchant-context.md) | Domain events, feature flags and merchant context | Accepted | Phase 2 (functional) |
 
 ## Template
 
