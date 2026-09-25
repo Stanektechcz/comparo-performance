@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://comparo.example/</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/products</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/products"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/products"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/products"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/products"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/products"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/products"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/products"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/products"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/shops</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/shops"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/shops"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/shops"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/shops"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/shops"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/shops"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/shops"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/shops"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/deals</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/deals"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/deals"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/deals"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/deals"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/deals"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/deals"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/deals"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/deals"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/categories</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/categories"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/categories"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/categories"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/categories"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/categories"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/categories"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/categories"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/categories"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/brands</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/ingredients</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/compare</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/compare/shops</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/reviews</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/reviews"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/reviews"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/reviews"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/reviews"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/reviews"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/reviews"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/reviews"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/reviews"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/community</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/forum</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/guides</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/research</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/research"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/research"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/research"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/research"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/research"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/research"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/research"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/research"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/blog</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/ask</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/ask"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/ask"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/ask"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/ask"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/ask"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/ask"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/ask"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/ask"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/trust</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/trust"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/trust"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/trust"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/trust"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/trust"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/trust"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/trust"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/trust"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/methodology</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="de" href="https://comparo.example/de/methodology"/>
+    <xhtml:link rel="alternate" hreflang="at" href="https://comparo.example/at/methodology"/>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://comparo.example/cs/methodology"/>
+    <xhtml:link rel="alternate" hreflang="sk" href="https://comparo.example/sk/methodology"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://comparo.example/pl/methodology"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://comparo.example/fr/methodology"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://comparo.example/en/methodology"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://comparo.example/methodology"/>
+  </url>
+  <url>
+    <loc>https://comparo.example/advertising</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/for-merchants</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/creators</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://comparo.example/newsletter</loc>
+    <lastmod>2026-09-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>

@@ -1,0 +1,23 @@
+* text=auto eol=lf
+
+*.blade.php diff=html
+*.css diff=css
+*.html diff=html
+*.md diff=markdown
+*.php diff=php
+
+CHANGELOG.md export-ignore
+README.md export-ignore
+.github/workflows/browser-tests.yml export-ignore
+
+# Protected prototype specification (see docs/prototype/SHA256SUMS and `php artisan comparo:verify-prototype`):
+# stored and checked out byte-for-byte, never line-ending normalised.
+/*.md -text diff=markdown
+/*.dc.html -text diff=html
+/*.js -text
+/sitemap*.xml -text
+/robots.txt -text
+/llms.txt -text
+/.thumbnail -text
+/screenshots/** -text
+/uploads/** -text

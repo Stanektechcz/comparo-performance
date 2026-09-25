@@ -1,0 +1,610 @@
+#!/usr/bin/env node
+/**
+ * Prototype parity fixture exporter.
+ *
+ * Loads the original browser prototype (seed graph + scoring engines + the
+ * offer pipeline embedded in `Comparo Performance.dc.html`) headless inside a
+ * `node:vm` sandbox with a frozen clock, then exports deterministic golden
+ * fixtures that the PHP services must reproduce.
+ *
+ *   node tools/prototype-parity/export-fixtures.mjs          write fixtures
+ *   node tools/prototype-parity/export-fixtures.mjs --check  fail on drift (CI)
+ *
+ * The prototype files are only read, never modified. Output is byte-stable:
+ * no wall-clock timestamps, stable ordering, one record per line.
+ *
+ * Recipe and parity traps: docs/architecture/scoring-engines-map.md §13.
+ */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+
+const ROOT = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../..',
+);
+const FIXTURE_DIR = path.join(ROOT, 'tests/Fixtures/PrototypeParity');
+const SNAPSHOT_FILE = path.join(
+    ROOT,
+    'database/data/prototype/seed-snapshot.json',
+);
+const HTML_FILE = 'Comparo Performance.dc.html';
+const CHECK_ONLY = process.argv.includes('--check');
+
+/** HTML script order, minus support.js (DOM runtime) and live.js (non-deterministic). */
+const LOAD_ORDER = [
+    'seed.js',
+    'seed-community.js',
+    'seed-geo.js',
+    'seed-live.js',
+    'seed-gamify.js',
+    'seed-dose.js',
+    'seed-orders.js',
+    'seed-labels.js',
+    'seed-network.js',
+    'labels.js',
+    'seed-visibility.js',
+    'seed-governance.js',
+    'visibility.js',
+    'governance.js',
+    'seed-seo.js',
+    'seed-intel.js',
+    'intel.js',
+    'seed-growth.js',
+    'growth.js',
+    'seed-commercial.js',
+    'commercial.js',
+    'seed-addons.js',
+    'gamify.js',
+    'addons.js',
+];
+
+/** Presentation-only keys that must never be part of a parity contract. */
+const PRESENTATION_KEYS = new Set([
+    'color',
+    'colour',
+    'width',
+    'rankWidth',
+    'rankColor',
+]);
+
+function sha256(file) {
+    return crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(path.join(ROOT, file)))
+        .digest('hex');
+}
+
+function createSandbox(frozenNow) {
+    const memory = new Map();
+    const localStorage = {
+        getItem: (key) => (memory.has(key) ? memory.get(key) : null),
+        setItem: (key, value) => memory.set(key, String(value)),
+        removeItem: (key) => memory.delete(key),
+        clear: () => memory.clear(),
+    };
+
+    class FrozenDate extends Date {
+        constructor(...args) {
+            super(...(args.length ? args : [frozenNow]));
+        }
+
+        static now() {
+            return frozenNow;
+        }
+    }
+
+    const sandbox = {
+        console,
+        Intl,
+        localStorage,
+        sessionStorage: localStorage,
+        Date: FrozenDate,
+        setInterval: () => 0,
+        clearInterval: () => {},
+        setTimeout: () => 0,
+        clearTimeout: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        location: {
+            hash: '',
+            href: 'http://localhost/',
+            pathname: '/',
+            search: '',
+        },
+        document: {
+            readyState: 'complete',
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            body: null,
+            head: { appendChild: () => {} },
+            documentElement: {
+                setAttribute: () => {},
+                style: { setProperty: () => {} },
+            },
+        },
+    };
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    sandbox.Math = Object.create(Math);
+    sandbox.Math.random = () => {
+        throw new Error(
+            'Math.random() reached from the scoring path — fixtures would not be deterministic.',
+        );
+    };
+
+    return vm.createContext(sandbox);
+}
+
+function loadPrototype() {
+    // seed.js defines S.NOW itself; the frozen clock must equal it.
+    const frozenNow = Date.parse('2026-09-06T09:00:00Z');
+    const context = createSandbox(frozenNow);
+
+    for (const file of LOAD_ORDER) {
+        vm.runInContext(
+            fs.readFileSync(path.join(ROOT, file), 'utf8'),
+            context,
+            { filename: file },
+        );
+    }
+
+    const seed = context.SEED;
+    if (!seed || seed.NOW !== frozenNow) {
+        throw new Error(
+            `SEED.NOW (${seed && seed.NOW}) does not match the frozen clock (${frozenNow}).`,
+        );
+    }
+
+    const lines = fs
+        .readFileSync(path.join(ROOT, HTML_FILE), 'utf8')
+        .split(/\r?\n/);
+    const start = lines.findIndex((line) =>
+        line.startsWith('class Component extends DCLogic'),
+    );
+    const end = start >= 0 ? lines.indexOf('</script>', start) : -1;
+    if (start < 0 || end < 0) {
+        throw new Error(
+            'Could not locate `class Component extends DCLogic … </script>` in the prototype HTML.',
+        );
+    }
+
+    const stubBase =
+        'class DCLogic { constructor(p) { this.props = p || {}; } ' +
+        'setState(u) { const x = typeof u === "function" ? u(this.state) : u; this.state = Object.assign({}, this.state, x); } }\n';
+    vm.runInContext(
+        `${stubBase}${lines.slice(start, end).join('\n')}\nglobalThis.Component = Component;`,
+        context,
+        {
+            filename: 'component.js',
+        },
+    );
+
+    const app = new context.Component({});
+
+    return { seed, app, ix: app.ix(), frozenNow };
+}
+
+/** Deep copy that drops functions and presentation-only keys, and replaces object refs by ids. */
+function clean(value) {
+    if (value === undefined) {
+        return null;
+    }
+
+    return JSON.parse(
+        JSON.stringify(value, (key, v) => {
+            if (PRESENTATION_KEYS.has(key) || typeof v === 'function') {
+                return undefined;
+            }
+            if (key === 'product' && v && typeof v === 'object' && 'id' in v) {
+                return v.id;
+            }
+
+            return v;
+        }),
+    );
+}
+
+function selectMarket(app, iso) {
+    app.state.country = iso;
+    app.state.currency = 'EUR';
+    app._mk = {};
+    app._rc = {};
+}
+
+function exportOfferPipeline({ seed, app, ix }) {
+    const ranking = [];
+    const pricing = [];
+    const marketStats = [];
+    const originalRank = ix.rank;
+    let captured = null;
+
+    ix.rank = (ctx) => {
+        const result = originalRank(ctx);
+        captured = { ctx: clean(ctx), result: clean(result) };
+
+        return result;
+    };
+
+    try {
+        for (const country of seed.countries) {
+            selectMarket(app, country.iso);
+
+            for (const offer of app.allOffers()) {
+                captured = null;
+                const row = app.offerRow(offer);
+
+                pricing.push({
+                    offerId: offer.id,
+                    productId: offer.productId,
+                    merchantId: offer.merchantId,
+                    market: country.iso,
+                    ships: !!row.ships,
+                    price: offer.price,
+                    effective: row.effNum,
+                    shipping: row.shipNum,
+                    total: row.totalNum,
+                    couponCode: row.hasCoupon ? row.couponCode : null,
+                    deliveryDaysMax: row.deliveryNum,
+                    discountPct: row.discNum,
+                    anomaly: !!row.anomaly,
+                });
+
+                if (row.ships && captured) {
+                    ranking.push({
+                        offerId: offer.id,
+                        productId: offer.productId,
+                        merchantId: offer.merchantId,
+                        market: country.iso,
+                        ctx: captured.ctx,
+                        result: captured.result,
+                    });
+                }
+            }
+
+            for (const product of seed.products) {
+                const stats = app.marketStats(product.id);
+                marketStats.push({
+                    productId: product.id,
+                    market: country.iso,
+                    ...clean(stats),
+                });
+            }
+        }
+    } finally {
+        ix.rank = originalRank;
+    }
+
+    return { ranking, pricing, marketStats };
+}
+
+function syntheticRankingCases(ix) {
+    const base = {
+        total: 30,
+        marketMin: 28,
+        marketMedian: 31,
+        ship: 3.9,
+        shipMedian: 4.5,
+        deliveryDays: 4,
+        rating: 4.4,
+        reviewCount: 320,
+        trust: 82,
+        freshnessHours: 6,
+        availability: 'in_stock',
+        hasValidCoupon: false,
+        completeness: 0.875,
+        anomaly: false,
+        fakeDiscount: false,
+        linkFlag: false,
+        complianceUnknown: false,
+        complianceBlocked: false,
+        riskLevel: 'LOW',
+    };
+    const variants = {
+        baseline: {},
+        'falsy fallbacks (JS ||)': {
+            trust: 0,
+            rating: 0,
+            reviewCount: 0,
+            deliveryDays: 0,
+            freshnessHours: 0,
+            completeness: 0,
+            shipMedian: 0,
+        },
+        'cheapest in market': { total: 28 },
+        'more than 35 % above market min': { total: 40 },
+        'stale feed': { freshnessHours: 60 },
+        'price anomaly': { anomaly: true },
+        'fake reference price': { fakeDiscount: true },
+        'broken outbound link (hidden)': { linkFlag: true },
+        'compliance unknown': { complianceUnknown: true },
+        'compliance blocked': { complianceBlocked: true },
+        'risk HIGH (hidden)': { riskLevel: 'HIGH' },
+        'risk CRITICAL (hidden)': { riskLevel: 'CRITICAL' },
+        'low stock': { availability: 'low_stock' },
+        preorder: { availability: 'preorder' },
+        'out of stock': { availability: 'out_of_stock' },
+        'valid coupon': { hasValidCoupon: true },
+        'free shipping': { ship: 0 },
+        'slow delivery': { deliveryDays: 12 },
+        'everything wrong': {
+            total: 60,
+            anomaly: true,
+            fakeDiscount: true,
+            linkFlag: true,
+            freshnessHours: 100,
+            riskLevel: 'CRITICAL',
+            complianceUnknown: true,
+            availability: 'out_of_stock',
+            trust: 10,
+            rating: 2,
+        },
+        'custom weights (Ranking Lab)': {
+            weights: {
+                price: 40,
+                trust: 10,
+                delivery: 10,
+                reviews: 10,
+                freshness: 10,
+                availability: 10,
+                shipping: 10,
+            },
+        },
+        'zero weight factor': {
+            weights: {
+                price: 30,
+                trust: 0,
+                delivery: 14,
+                reviews: 12,
+                freshness: 10,
+                availability: 8,
+                shipping: 6,
+            },
+        },
+    };
+
+    return Object.entries(variants).map(([name, override]) => {
+        const ctx = { ...base, ...override };
+
+        return { name, ctx: clean(ctx), result: clean(ix.rank(ctx)) };
+    });
+}
+
+function exportCompliance({ seed, app }) {
+    const cases = [];
+    for (const product of seed.products) {
+        for (const country of seed.countries) {
+            const decision = app.comp(product.id, country.iso);
+            cases.push({
+                productId: product.id,
+                market: country.iso,
+                status: decision.status,
+                source: decision.source,
+                explicitRule: seed.complianceRules.some(
+                    (r) =>
+                        r.productId === product.id && r.country === country.iso,
+                ),
+            });
+        }
+    }
+
+    return cases;
+}
+
+function exportMerchantScores({ seed, app, ix }) {
+    return seed.merchants.map((merchant) => {
+        const m = app.M(merchant.id);
+
+        return {
+            merchantId: merchant.id,
+            trust: clean(ix.trust(m)),
+            risk: clean(ix.risk(m)),
+            deliveryReliability: clean(ix.deliveryReliability(m)),
+            rating: clean(app.ratingOf('merchant', merchant.id)),
+        };
+    });
+}
+
+function exportProductScores({ seed, app, ix }) {
+    return seed.products.map((product) => {
+        const stats = ix.histStats(product);
+
+        return {
+            productId: product.id,
+            completion: clean(ix.completion(product.id)),
+            histStats: clean(stats),
+            priceBadge: clean(ix.priceBadge(stats.cur, stats)),
+            timing: clean(ix.timing(stats.cur, stats)),
+            forecast: clean(ix.forecast(product)),
+            rating: clean(app.ratingOf('product', product.id)),
+        };
+    });
+}
+
+function exportOfferScores({ seed, ix }) {
+    return seed.offers.map((offer) => ({
+        offerId: offer.id,
+        priceConfidence: clean(ix.priceConfidence(offer)),
+        fakeDiscount: clean(ix.fakeDiscount(offer)),
+    }));
+}
+
+function exportCoupons({ seed, ix }) {
+    return seed.coupons.map((coupon) => ({
+        couponId: coupon.id,
+        meta: clean(ix.couponMeta(coupon)),
+    }));
+}
+
+function exportReviews({ app, ix }) {
+    return app.allReviews().map((review) => ({
+        reviewId: review.id,
+        reviewTrust: clean(ix.reviewTrust(review)),
+        weight: app.reviewWeight(review),
+    }));
+}
+
+function exportMatching({ seed, ix }) {
+    const items = seed.feedItems || [];
+
+    return items.map((item) => ({
+        feedItemId: item.id,
+        match: clean(ix.match(item)),
+    }));
+}
+
+function exportDosing({ seed, app }) {
+    const cases = [];
+    for (const country of seed.countries) {
+        selectMarket(app, country.iso);
+        for (const product of seed.products) {
+            cases.push({
+                productId: product.id,
+                market: country.iso,
+                servingMg: app.servingMg(product),
+                activeMg: app.activeMg(product),
+                packActiveG: app.packActiveG(product),
+                costPerActiveG: app.costPerActiveG(product),
+            });
+        }
+    }
+
+    return cases;
+}
+
+function exportDelivery({ seed, app }) {
+    const cases = [];
+    for (const merchant of seed.merchants) {
+        for (const iso of Object.keys(merchant.zones || {}).sort()) {
+            cases.push({
+                merchantId: merchant.id,
+                market: iso,
+                stats: clean(app.deliveryStats(merchant.id, iso)),
+            });
+        }
+    }
+
+    return cases;
+}
+
+/**
+ * Values the prototype derives from data that Laravel does not own yet
+ * (credibility-weighted review averages need the Reviews context, Phase 4).
+ * The demo importer stores them as explicitly labelled derived aggregates.
+ */
+function exportDerived({ seed, app }) {
+    const ratings = (type, rows) =>
+        Object.fromEntries(
+            rows.map((row) => {
+                const rating = app.ratingOf(type, row.id);
+
+                return [row.id, { average: rating.avg, count: rating.count }];
+            }),
+        );
+
+    return {
+        note: 'Derived by the prototype (ratingOf). Recomputed natively once the Reviews context lands.',
+        merchantRatings: ratings('merchant', seed.merchants),
+        productRatings: ratings('product', seed.products),
+    };
+}
+
+/** One record per line keeps multi-megabyte fixtures reviewable in diffs. */
+function serialise(meta, sections) {
+    const parts = [`{"meta":${JSON.stringify(meta)}`];
+    for (const [name, records] of Object.entries(sections)) {
+        parts.push(
+            `,\n"${name}":[\n${records.map((r) => JSON.stringify(r)).join(',\n')}\n]`,
+        );
+    }
+
+    return `${parts.join('')}\n}\n`;
+}
+
+function main() {
+    const loaded = loadPrototype();
+    const { seed, frozenNow } = loaded;
+    const sourceFiles = [...LOAD_ORDER, HTML_FILE];
+    const meta = {
+        generator: 'tools/prototype-parity/export-fixtures.mjs',
+        frozenNow,
+        frozenNowIso: new Date(frozenNow).toISOString(),
+        sourceHashes: Object.fromEntries(
+            sourceFiles.map((file) => [file, sha256(file)]),
+        ),
+    };
+
+    const pipeline = exportOfferPipeline(loaded);
+    const outputs = {
+        [path.join(FIXTURE_DIR, 'ranking.json')]: serialise(
+            { ...meta, weights: clean(seed.ix.rankWeights) },
+            {
+                offers: pipeline.ranking,
+                synthetic: syntheticRankingCases(loaded.ix),
+            },
+        ),
+        [path.join(FIXTURE_DIR, 'pricing.json')]: serialise(meta, {
+            offers: pipeline.pricing,
+            marketStats: pipeline.marketStats,
+            coupons: exportCoupons(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'compliance.json')]: serialise(meta, {
+            cases: exportCompliance(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'trust.json')]: serialise(meta, {
+            merchants: exportMerchantScores(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'products.json')]: serialise(meta, {
+            products: exportProductScores(loaded),
+            offers: exportOfferScores(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'reviews.json')]: serialise(meta, {
+            reviews: exportReviews(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'matching.json')]: serialise(meta, {
+            items: exportMatching(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'dosing.json')]: serialise(meta, {
+            cases: exportDosing(loaded),
+        }),
+        [path.join(FIXTURE_DIR, 'delivery.json')]: serialise(meta, {
+            cases: exportDelivery(loaded),
+        }),
+        [SNAPSHOT_FILE]: `${JSON.stringify({ meta, seed: clean({ ...seed, helpers: undefined }), derived: exportDerived(loaded) })}\n`,
+    };
+
+    let drift = 0;
+    for (const [file, content] of Object.entries(outputs)) {
+        const relative = path.relative(ROOT, file).replaceAll('\\', '/');
+        if (CHECK_ONLY) {
+            const current = fs.existsSync(file)
+                ? fs.readFileSync(file, 'utf8')
+                : null;
+            if (current !== content) {
+                drift += 1;
+                console.error(`DRIFT  ${relative}`);
+            }
+            continue;
+        }
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, content);
+        console.log(
+            `wrote  ${relative}  (${(Buffer.byteLength(content) / 1024).toFixed(0)} KiB)`,
+        );
+    }
+
+    if (CHECK_ONLY) {
+        if (drift > 0) {
+            console.error(
+                `${drift} fixture file(s) differ from the prototype. Run without --check and review the diff.`,
+            );
+            process.exit(1);
+        }
+        console.log('Prototype parity fixtures are up to date.');
+    }
+}
+
+main();

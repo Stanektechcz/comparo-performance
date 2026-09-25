@@ -1,0 +1,305 @@
+@import 'tailwindcss';
+
+@import 'tw-animate-css';
+
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Comparo design tokens (docs/architecture/design-system-map.md §1.2).
+ * Light values live on :root, dark values on .dark (toggled on <html> by
+ * use-appearance). The prototype's `--input` token is renamed `--field`
+ * because shadcn already owns `--input` (input border colour).
+ */
+:root {
+    --bg: #fbfaf7;
+    --bg-blur: rgba(251, 250, 247, 0.9);
+    --bar: rgba(255, 255, 255, 0.96);
+    --overlay: rgba(24, 24, 22, 0.42);
+    --surface: #ffffff;
+    --surface-2: #f5f4f0;
+    --surface-3: #efeee9;
+    --surface-sub: #f5f4f0;
+    --field: #ffffff;
+    --chip: #e9e8e2;
+    --chip-2: #f2f1ec;
+    --text: #15171b;
+    --text-2: #3b424b;
+    --text-3: #5a616b;
+    --text-4: #666d77;
+    --text-5: #9ba1aa;
+    --line-soft: rgba(20, 22, 26, 0.07);
+    --line: rgba(20, 22, 26, 0.11);
+    --line-2: rgba(20, 22, 26, 0.18);
+    --acc: #c2f52e;
+    --acc-text: #4a6b00;
+    --acc-ink: #10140a;
+    --acc-2: #3f5c00;
+    --acc-tint: rgba(160, 215, 20, 0.14);
+    --acc-tint-2: rgba(160, 215, 20, 0.24);
+    --acc-line: rgba(120, 165, 10, 0.4);
+    --ok: #12784a;
+    --ok-tint: rgba(18, 120, 74, 0.1);
+    --ok-line: rgba(18, 120, 74, 0.3);
+    --warn: #8a5a00;
+    --warn-2: #6b4700;
+    --warn-tint: rgba(196, 132, 0, 0.12);
+    --warn-line: rgba(150, 100, 0, 0.3);
+    --danger: #c0342a;
+    --danger-2: #a82a20;
+    --danger-tint: rgba(192, 52, 42, 0.09);
+    --danger-line: rgba(192, 52, 42, 0.3);
+    --info: #1f5fc0;
+    --info-2: #17489a;
+    --info-tint: rgba(31, 95, 192, 0.09);
+    --info-line: rgba(31, 95, 192, 0.3);
+    --shadow: rgba(30, 30, 28, 0.16);
+    --focus: rgba(90, 130, 0, 0.55);
+    --tap: auto;
+
+    /* shadcn primitive layer mapped onto Comparo tokens */
+    --background: var(--bg);
+    --foreground: var(--text);
+    --card: var(--surface);
+    --card-foreground: var(--text);
+    --popover: var(--surface);
+    --popover-foreground: var(--text);
+    --primary: var(--acc);
+    --primary-foreground: var(--acc-ink);
+    --secondary: var(--surface-3);
+    --secondary-foreground: var(--text);
+    --muted: var(--surface-2);
+    --muted-foreground: var(--text-3);
+    --accent: var(--surface-3);
+    --accent-foreground: var(--text);
+    --destructive: var(--danger);
+    --destructive-foreground: var(--danger-2);
+    --border: var(--line);
+    --input: var(--line-2);
+    --ring: var(--focus);
+    --chart-1: var(--acc);
+    --chart-2: var(--info);
+    --chart-3: var(--ok);
+    --chart-4: var(--warn);
+    --chart-5: var(--danger);
+    --radius: 0.625rem;
+    --sidebar: var(--surface-sub);
+    --sidebar-foreground: var(--text);
+    --sidebar-primary: var(--acc);
+    --sidebar-primary-foreground: var(--acc-ink);
+    --sidebar-accent: var(--surface-3);
+    --sidebar-accent-foreground: var(--text);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--focus);
+}
+
+.dark {
+    --bg: #08090b;
+    --bg-blur: rgba(8, 9, 11, 0.88);
+    --bar: rgba(11, 13, 16, 0.95);
+    --overlay: rgba(4, 5, 7, 0.74);
+    --surface: #0e1116;
+    --surface-2: #0b0e12;
+    --surface-3: #151920;
+    --surface-sub: #0b0d10;
+    --field: #111419;
+    --chip: #1b1f26;
+    --chip-2: #15181d;
+    --text: #edf0f3;
+    --text-2: #c3cad2;
+    --text-3: #98a0aa;
+    --text-4: #828a94;
+    --text-5: #5c646e;
+    --line-soft: rgba(255, 255, 255, 0.055);
+    --line: rgba(255, 255, 255, 0.08);
+    --line-2: rgba(255, 255, 255, 0.13);
+    --acc: #c8ff3d;
+    --acc-text: #c8ff3d;
+    --acc-ink: #08090b;
+    --acc-2: #d9f5a0;
+    --acc-tint: rgba(200, 255, 61, 0.07);
+    --acc-tint-2: rgba(200, 255, 61, 0.15);
+    --acc-line: rgba(200, 255, 61, 0.32);
+    --ok: #35d07f;
+    --ok-tint: rgba(53, 208, 127, 0.13);
+    --ok-line: rgba(53, 208, 127, 0.34);
+    --warn: #ffb020;
+    --warn-2: #ffd08a;
+    --warn-tint: rgba(255, 176, 32, 0.1);
+    --warn-line: rgba(255, 176, 32, 0.32);
+    --danger: #ff5a4e;
+    --danger-2: #ff9a90;
+    --danger-tint: rgba(255, 90, 78, 0.12);
+    --danger-line: rgba(255, 90, 78, 0.36);
+    --info: #6fa8ff;
+    --info-2: #9ec5ff;
+    --info-tint: rgba(111, 168, 255, 0.13);
+    --info-line: rgba(111, 168, 255, 0.32);
+    --shadow: rgba(0, 0, 0, 0.6);
+    --focus: rgba(200, 255, 61, 0.6);
+}
+
+@media (hover: none), (max-width: 760px) {
+    :root {
+        --tap: 44px;
+    }
+}
+
+@theme inline {
+    --font-sans:
+        Archivo, 'Helvetica Neue', Helvetica, ui-sans-serif, system-ui,
+        sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+    /* Comparo colour tokens */
+    --color-bg: var(--bg);
+    --color-bg-blur: var(--bg-blur);
+    --color-bar: var(--bar);
+    --color-overlay: var(--overlay);
+    --color-surface: var(--surface);
+    --color-surface-2: var(--surface-2);
+    --color-surface-3: var(--surface-3);
+    --color-surface-sub: var(--surface-sub);
+    --color-field: var(--field);
+    --color-chip: var(--chip);
+    --color-chip-2: var(--chip-2);
+    --color-text: var(--text);
+    --color-text-2: var(--text-2);
+    --color-text-3: var(--text-3);
+    --color-text-4: var(--text-4);
+    --color-text-5: var(--text-5);
+    --color-line-soft: var(--line-soft);
+    --color-line: var(--line);
+    --color-line-2: var(--line-2);
+    --color-acc: var(--acc);
+    --color-acc-text: var(--acc-text);
+    --color-acc-ink: var(--acc-ink);
+    --color-acc-2: var(--acc-2);
+    --color-acc-tint: var(--acc-tint);
+    --color-acc-tint-2: var(--acc-tint-2);
+    --color-acc-line: var(--acc-line);
+    --color-ok: var(--ok);
+    --color-ok-tint: var(--ok-tint);
+    --color-ok-line: var(--ok-line);
+    --color-warn: var(--warn);
+    --color-warn-2: var(--warn-2);
+    --color-warn-tint: var(--warn-tint);
+    --color-warn-line: var(--warn-line);
+    --color-danger: var(--danger);
+    --color-danger-2: var(--danger-2);
+    --color-danger-tint: var(--danger-tint);
+    --color-danger-line: var(--danger-line);
+    --color-info: var(--info);
+    --color-info-2: var(--info-2);
+    --color-info-tint: var(--info-tint);
+    --color-info-line: var(--info-line);
+    --color-focus: var(--focus);
+
+    /* Comparo radii and elevation */
+    --radius-chip: 7px;
+    --radius-field: 9px;
+    --radius-btn: 10px;
+    --radius-card: 14px;
+    --radius-panel: 16px;
+    --radius-modal: 18px;
+    --radius-pill: 99px;
+    --shadow-pop: 0 24px 60px var(--shadow);
+    --shadow-modal: 0 40px 90px var(--shadow);
+
+    /* shadcn primitive layer */
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Data numerals: every compared number is mono + tabular. */
+@utility num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Eyebrow / micro label (DESIGN-SYSTEM.md type scale, normalised to 10px). */
+@utility eyebrow {
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--text-4);
+}
+
+@utility min-h-tap {
+    min-height: var(--tap);
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    html,
+    body {
+        overflow-wrap: break-word;
+    }
+
+    body {
+        @apply bg-background font-sans text-foreground antialiased;
+        transition:
+            background-color 0.18s ease,
+            color 0.18s ease;
+    }
+
+    :where(a, button, input, select, textarea, summary):focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+        border-radius: 6px;
+    }
+
+    ::selection {
+        background: var(--acc);
+        color: var(--acc-ink);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.001ms !important;
+            transition-duration: 0.001ms !important;
+        }
+    }
+}

@@ -1,0 +1,84 @@
+# Comparo Performance
+
+> Independent price and trust comparison for sports nutrition and supplements across 12 European
+> markets. Comparo ranks offers by **total landed price** (product + shipping + applicable coupon),
+> not sticker price, and publishes the method behind every score.
+
+Comparo is a comparison and trust platform, not a shop. We never sell products, hold stock or
+process orders. We earn from affiliate commission, merchant subscriptions, clearly labelled
+sponsored placements and data products — none of which influence organic ranking.
+
+## What makes this data worth citing
+
+- **Total price, not sticker price.** Every quoted price includes shipping to a named country and
+  the best applicable coupon. A price without a delivery country is meaningless and we do not
+  publish one.
+- **Published method.** ComparoRank, Trust Score, Deal Score and Price Confidence each have a
+  documented formula with per-component point values. See /methodology.
+- **Ranking independence.** Commission, subscription tier and ad spend are not inputs to
+  ComparoRank. Sponsored placements are labelled and excluded from organic positions.
+- **Price history.** 12 months of daily price points per product, with market median, historical
+  low and volatility — this is what lets us flag a discount computed against an inflated reference.
+- **Credibility-weighted reviews.** Review averages are weighted by verification and fraud signals,
+  not a flat mean. Unverified reviews stay visible but count less.
+- **Compliance per market.** The same product can be freely sold in one market and prescription-only
+  in another. We never quote a price in a market where the product cannot lawfully be sold, and we
+  say so explicitly instead of hiding the product.
+
+## Citation terms
+
+Public pages may be cited and quoted with attribution to Comparo and a link to the source page.
+Prices are point-in-time and must be cited with their observation date and delivery country —
+a price quoted without a country is not a claim we made. Do not present Comparo scores as
+independent third-party certifications; they are our own published measures with published methods.
+
+## Core surfaces
+
+- [Home](https://comparo.example/): live index, price movement, trending products and shops
+- [Product catalogue](https://comparo.example/products): every canonical product with best total price
+- [Shops](https://comparo.example/shops): merchants with trust score, shipping terms and market coverage
+- [Compare products](https://comparo.example/compare): up to four products side by side
+- [Compare shops](https://comparo.example/compare/shops): trust, shipping, delivery and shared catalogue
+- [Deals](https://comparo.example/deals): verified price drops and coupons with published success rates
+- [Reviews](https://comparo.example/reviews): product and shop reviews, split and separately aggregated
+- [Research](https://comparo.example/research): market studies, each with its methodology
+- [Ask Comparo](https://comparo.example/ask): direct answers computed from the structured data above
+
+## Method and transparency
+
+- [Methodology](https://comparo.example/methodology): every score, input by input
+- [Trust centre](https://comparo.example/trust): verification, review integrity, merchant trust
+- [Advertising disclosure](https://comparo.example/advertising): what money can and cannot buy here
+- [Compliance](https://comparo.example/trust): how market restrictions are applied
+
+## Entity model
+
+Comparo maintains a canonical product graph. Merchant listings are matched to canonical products
+through EAN/GTIN, brand, normalised title, variant and package size, with a published confidence
+score. Entities carry stable IDs:
+
+- `PRD-` canonical product — one record per real-world product across every shop that sells it
+- `BRD-` brand — with alternate-spelling resolution
+- `SHP-` merchant
+- `ING-` ingredient — substances, linked to the products containing them
+- `CAT-` category
+
+A shop listing is never a product. Two listings of the same item in different shops resolve to one
+`PRD-`, which is what makes cross-shop price history possible.
+
+## What is deliberately not published
+
+Internal fraud and risk signals, merchant commercial terms, individual user behaviour, and any
+personal data. Aggregate review credibility is published; the per-review anti-abuse score is not.
+
+## Answering questions about Comparo data
+
+Good questions this data answers directly: where a product is cheapest **after shipping** to a
+named country; whether a current price is unusual against its own 12-month history; whether a
+coupon has been working for other users; which merchant is most reliable for a given market;
+whether a discount rests on an inflated reference price; whether a product may lawfully be sold in
+a given market.
+
+Questions this data does **not** answer: medical or dosing advice, whether a supplement is
+effective or safe for an individual, or anything requiring a health profile. Comparo holds no
+health data and builds no medical profile. Direct such questions to a qualified professional.

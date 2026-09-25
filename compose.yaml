@@ -1,0 +1,65 @@
+# Local development services for Comparo Performance.
+# Usage: docker compose up -d   (see docs/development/setup.md)
+# The Laravel app itself runs on the host (php artisan serve / composer dev).
+name: comparo
+
+services:
+    pgsql:
+        image: postgres:16-alpine
+        environment:
+            POSTGRES_DB: comparo
+            POSTGRES_USER: comparo
+            POSTGRES_PASSWORD: comparo
+        ports:
+            - '5432:5432'
+        volumes:
+            - comparo-pgsql:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD', 'pg_isready', '-U', 'comparo', '-d', 'comparo']
+            interval: 5s
+            retries: 10
+
+    redis:
+        image: redis:7-alpine
+        ports:
+            - '6379:6379'
+        volumes:
+            - comparo-redis:/data
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            retries: 10
+
+    meilisearch:
+        image: getmeili/meilisearch:v1.11
+        environment:
+            MEILI_MASTER_KEY: masterKey-change-me
+            MEILI_NO_ANALYTICS: 'true'
+        ports:
+            - '7700:7700'
+        volumes:
+            - comparo-meilisearch:/meili_data
+
+    minio:
+        image: minio/minio:latest
+        command: server /data --console-address ":9001"
+        environment:
+            MINIO_ROOT_USER: comparo
+            MINIO_ROOT_PASSWORD: comparo-secret
+        ports:
+            - '9000:9000'
+            - '9001:9001'
+        volumes:
+            - comparo-minio:/data
+
+    mailpit:
+        image: axllent/mailpit:latest
+        ports:
+            - '1025:1025'
+            - '8025:8025'
+
+volumes:
+    comparo-pgsql:
+    comparo-redis:
+    comparo-meilisearch:
+    comparo-minio:

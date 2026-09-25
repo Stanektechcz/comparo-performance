@@ -1,0 +1,102 @@
+# robots.txt — Comparo Performance
+# Generated from the live page registry. Regenerate whenever indexation rules change:
+# /seo → Indexation → Export robots.txt
+
+User-agent: *
+Allow: /
+
+# ---- Private commercial and account surfaces: never indexable ----
+Disallow: /account
+Disallow: /account/*
+Disallow: /merchant
+Disallow: /merchant/*
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /intel
+Disallow: /intel/*
+Disallow: /growth
+Disallow: /growth/*
+Disallow: /commercial
+Disallow: /commercial/*
+Disallow: /seo
+Disallow: /seo/*
+Disallow: /design-system
+Disallow: /billing
+Disallow: /invoices
+Disallow: /subscriptions
+Disallow: /api-keys
+Disallow: /for-you
+Disallow: /basket
+
+# ---- Faceted and parameterised URLs: crawlable, not indexable ----
+# Canonical handling lives in <head>; these keep crawl budget on canonical pages.
+Disallow: /*?sort=
+Disallow: /*?page=
+Disallow: /*?fRating=
+Disallow: /*?fWarehouse=
+Disallow: /*&sort=
+Disallow: /*&page=
+
+# ---- Search results ----
+Disallow: /search?q=
+Allow: /search$
+
+# ---- Crawl-delay for aggressive general crawlers ----
+User-agent: AhrefsBot
+Crawl-delay: 10
+
+User-agent: SemrushBot
+Crawl-delay: 10
+
+User-agent: MJ12bot
+Crawl-delay: 10
+
+# ---- AI crawlers: public data is allowed, private surfaces are not ----
+# Comparo publishes structured comparison data deliberately. See /llms.txt for a
+# machine-readable index and the citation terms.
+User-agent: GPTBot
+Allow: /
+Disallow: /account
+Disallow: /merchant
+Disallow: /admin
+Disallow: /intel
+Disallow: /growth
+Disallow: /commercial
+Disallow: /for-you
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /account
+Disallow: /merchant
+Disallow: /admin
+Disallow: /intel
+Disallow: /growth
+Disallow: /commercial
+Disallow: /for-you
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /account
+Disallow: /merchant
+Disallow: /admin
+Disallow: /intel
+Disallow: /growth
+Disallow: /commercial
+Disallow: /for-you
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /account
+Disallow: /merchant
+Disallow: /admin
+Disallow: /intel
+Disallow: /growth
+Disallow: /commercial
+Disallow: /for-you
+
+Sitemap: https://comparo.example/sitemap.xml
+Sitemap: https://comparo.example/sitemap-products.xml
+Sitemap: https://comparo.example/sitemap-shops.xml
+Sitemap: https://comparo.example/sitemap-brands.xml
+Sitemap: https://comparo.example/sitemap-categories.xml
+Sitemap: https://comparo.example/sitemap-content.xml
