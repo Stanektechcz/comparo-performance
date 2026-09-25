@@ -84,13 +84,15 @@ final class RankingService
                 * JsMath::clamp(0.55 + log10(1 + ($context->merchantReviewCount ?: 50)) / 6, 0, 1),
             RankingFactor::Freshness->value => JsMath::clamp(1 - ($context->freshnessHours ?: 12.0) / 72, 0, 1),
             RankingFactor::Availability->value => $context->availability?->rankingScore() ?? 0.0,
-            RankingFactor::Shipping->value => JsMath::clamp(1 - $context->shippingMinor / ($shippingMedian * 2), 0, 1),
+            RankingFactor::Shipping->value => $context->amountsComparable
+                ? JsMath::clamp(1 - $context->shippingMinor / ($shippingMedian * 2), 0, 1)
+                : 0.0,
         ];
     }
 
     private function priceScore(RankingContext $context): float
     {
-        if ($context->priceAnomaly) {
+        if ($context->priceAnomaly || ! $context->amountsComparable) {
             return 0.0;
         }
 

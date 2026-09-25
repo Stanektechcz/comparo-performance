@@ -8,7 +8,12 @@ use App\Domain\Offers\Availability;
 /**
  * Everything ComparoRank is allowed to know about one offer in one market.
  *
- * Amounts are integer minor units in the market's comparison currency.
+ * Amounts are integer minor units of one currency shared with the market
+ * baseline: the offers' own currency when the market's offers are priced in
+ * one currency, else the comparison currency (converted by the query layer).
+ * `amountsComparable` is false when this offer's amounts could not be
+ * converted (no known exchange rate): its price and shipping factors then
+ * score 0 — an amount that cannot be compared earns no advantage.
  * Adding a commercial input here (commission, plan, spend, campaign budget,
  * sponsorship) is forbidden and fails tests/Architecture/RankingPurityTest.
  */
@@ -33,5 +38,6 @@ final readonly class RankingContext
         public bool $complianceUnknown,
         public bool $complianceBlocked,
         public RiskLevel $riskLevel,
+        public bool $amountsComparable = true,
     ) {}
 }

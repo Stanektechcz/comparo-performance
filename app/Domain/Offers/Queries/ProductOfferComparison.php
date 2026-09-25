@@ -15,10 +15,12 @@ use App\Domain\Offers\Ranking\RankingWeights;
 use App\Domain\Platform\Markets\MarketContext;
 use App\Domain\Pricing\Confidence\PriceConfidenceInput;
 use App\Domain\Pricing\Confidence\PriceConfidenceService;
+use App\Domain\Pricing\Currency\ComparisonRates;
 use App\Domain\Pricing\Currency\CurrencyConversion;
 use App\Domain\Pricing\Currency\ExchangeRates;
 use App\Domain\Pricing\History\PriceHistoryAnalyzer;
 use App\Domain\Pricing\LandedPrice\CouponTerms;
+use App\Domain\Pricing\LandedPrice\LandedPrice;
 use App\Domain\Pricing\LandedPrice\LandedPriceCalculator;
 use App\Domain\Pricing\LandedPrice\LandedPriceInput;
 use App\Domain\Pricing\LandedPrice\ShippingTerms;
@@ -45,6 +47,17 @@ use Illuminate\Database\Eloquent\Collection;
  *
  * This is the query layer: it loads data and builds immutable contexts. Every
  * number is computed by a pure service (docs/adr/0004, 0007).
+ *
+ * Currencies: when the offers shipping to the market are priced in one
+ * currency (every prototype market), baselines, ranking inputs and the
+ * listing tie-break use their own minor units, exactly as ported. When they
+ * span several currencies, this layer loads the dated rates valid at `$now`
+ * into a ComparisonRates table: the market baseline and the ranking inputs
+ * become comparison-currency minor units (rounded half away from zero), and
+ * totals are compared unrounded (bcmath). An offer whose currency has no
+ * known rate is left out of the baseline, ranked without a price or shipping
+ * advantage and listed after comparable offers of equal rank. Displayed
+ * amounts always stay in each offer's own currency.
  */
 final class ProductOfferComparison
 {
@@ -78,11 +91,13 @@ final class ProductOfferComparison
         }
 
         $offers = $this->loadOffers($product, $market, $now);
+        $rates = $this->comparisonRates($offers, $now);
         $stats = $this->marketStats->calculate(array_values($offers->map(static fn (Offer $offer): MarketListing => new MarketListing(
             $offer->price_minor,
             $offer->merchant->shippingZones->first()?->cost_minor,
             $offer->merchant->free_shipping_threshold_minor,
-        ))->all()));
+            $offer->currency,
+        ))->all()), $rates);
 
         $completeness = $this->completenessOf($product);
         $historyMedian = $this->historyMedian($product->id, $now);
@@ -92,12 +107,12 @@ final class ProductOfferComparison
             if ($offer->merchant->shippingZones->isEmpty()) {
                 continue;
             }
-            $ranked[] = $this->evaluate($offer, $market, $compliance, $stats, $completeness, $historyMedian, $weights, $conversion, $now);
+            $ranked[] = $this->evaluate($offer, $market, $compliance, $stats, $rates, $completeness, $historyMedian, $weights, $conversion, $now);
         }
 
         $public = array_values(array_filter($ranked, static fn (ComparedOffer $offer): bool => $offer->isPublishable()));
-        usort($public, static fn (ComparedOffer $a, ComparedOffer $b): int => [$b->rank->score, $a->price->total->minor, $a->offerId]
-            <=> [$a->rank->score, $b->price->total->minor, $b->offerId]);
+        $amounts = $this->comparableAmounts($public, $rates);
+        $public = $this->inListingOrder($public, $amounts);
 
         return new OfferComparison(
             market: $market,
@@ -108,7 +123,7 @@ final class ProductOfferComparison
             notShipping: $offers->count() - count($ranked),
             withheldFlagged: count($ranked) - count($public),
             bestValueOfferId: $compliance->status->isRecommendable() ? $this->bestValue($public) : null,
-            lowestTotal: $this->lowestTotal($public, $now),
+            lowestTotal: $this->lowestTotal($public, $amounts),
             marketStats: $stats,
             weights: $weights,
             conversion: $conversion,
@@ -144,6 +159,7 @@ final class ProductOfferComparison
         MarketContext $market,
         ComplianceDecision $compliance,
         MarketStats $stats,
+        ?ComparisonRates $rates,
         ProductCompleteness $completeness,
         int $historyMedian,
         RankingWeights $weights,
@@ -166,11 +182,12 @@ final class ProductOfferComparison
         $trust = $this->merchantScores->trust($merchant);
         $freshnessHours = ($now->getTimestamp() - $offer->source_updated_at->getTimestamp()) / 3600;
         $referenceUnverified = $this->historyAnalyzer->hasUnverifiedReferencePrice($offer->reference_price_minor, $historyMedian);
+        $amounts = $this->baselineAmounts($price, $stats, $rates);
 
         $rank = $this->ranking->rank(new RankingContext(
-            totalMinor: $price->total->minor,
-            marketMinTotalMinor: $stats->minTotalMinor ?: $price->total->minor,
-            shippingMinor: $price->shipping->minor,
+            totalMinor: $amounts['total'],
+            marketMinTotalMinor: $stats->minTotalMinor ?: $amounts['total'],
+            shippingMinor: $amounts['shipping'],
             marketShippingMedianMinor: $stats->shippingMedianMinor,
             deliveryDaysMax: $price->deliveryMaxDays ?? 99,
             merchantRating: (float) ($merchant->weighted_rating ?? $merchant->rating_average ?? 0),
@@ -186,6 +203,7 @@ final class ProductOfferComparison
             complianceUnknown: $compliance->status === ComplianceStatus::Unknown,
             complianceBlocked: $compliance->status->isBlocked(),
             riskLevel: $this->merchantScores->risk($merchant)->level,
+            amountsComparable: $amounts['comparable'],
         ), $weights, $now);
 
         return new ComparedOffer(
@@ -268,6 +286,78 @@ final class ProductOfferComparison
     }
 
     /**
+     * The comparison rates of the offers shipping to the market, or null when
+     * they are all priced in one currency (then no rate is needed or loaded).
+     *
+     * @param  Collection<int, Offer>  $offers
+     */
+    private function comparisonRates(Collection $offers, DateTimeImmutable $now): ?ComparisonRates
+    {
+        $currencies = [];
+        foreach ($offers as $offer) {
+            if ($offer->merchant->shippingZones->isNotEmpty()) {
+                $currencies[$offer->currency] = $offer->currency;
+            }
+        }
+
+        return count($currencies) > 1
+            ? $this->exchangeRates->comparisonRates(array_values($currencies), (string) config('comparo.comparison_currency'), $now)
+            : null;
+    }
+
+    /**
+     * The offer's total and shipping in the currency of the market baseline:
+     * its own minor units when it shares that currency (every single-currency
+     * market), else converted by the comparison rates (half away from zero to
+     * a whole minor unit). Without a known rate the amounts are raw and marked
+     * not comparable, so the ranking gives them no price or shipping advantage.
+     *
+     * @return array{total: int, shipping: int, comparable: bool}
+     */
+    private function baselineAmounts(LandedPrice $price, MarketStats $stats, ?ComparisonRates $rates): array
+    {
+        if ($stats->currency === null || $stats->currency === $price->total->currency) {
+            return ['total' => $price->total->minor, 'shipping' => $price->shipping->minor, 'comparable' => true];
+        }
+
+        $convertible = $rates !== null && $rates->target === $stats->currency;
+        $total = $convertible ? $rates->convert($price->total) : null;
+        $shipping = $convertible ? $rates->convert($price->shipping) : null;
+
+        if ($total === null || $shipping === null) {
+            return ['total' => $price->total->minor, 'shipping' => $price->shipping->minor, 'comparable' => false];
+        }
+
+        return ['total' => $total->minor, 'shipping' => $shipping->minor, 'comparable' => true];
+    }
+
+    /**
+     * Organic order: higher rank, then lower total, then offer id. A
+     * single-currency listing compares total minor units, as ported; a mixed
+     * one compares exact comparison-currency amounts, and a total without a
+     * known rate sorts after the comparable totals of equal rank.
+     *
+     * @param  list<ComparedOffer>  $public
+     * @param  array<int, numeric-string|null>  $amounts  keyed by offer id
+     * @return list<ComparedOffer>
+     */
+    private function inListingOrder(array $public, array $amounts): array
+    {
+        if (count(self::currenciesOf($public)) <= 1) {
+            usort($public, static fn (ComparedOffer $a, ComparedOffer $b): int => [$b->rank->score, $a->price->total->minor, $a->offerId]
+                <=> [$a->rank->score, $b->price->total->minor, $b->offerId]);
+
+            return $public;
+        }
+
+        usort($public, static fn (ComparedOffer $a, ComparedOffer $b): int => ($b->rank->score <=> $a->rank->score)
+            ?: self::compareAmounts($amounts[$a->offerId], $amounts[$b->offerId])
+            ?: ($a->offerId <=> $b->offerId));
+
+        return $public;
+    }
+
+    /**
      * The lowest landed total of the public offers, reported in that offer's
      * own currency. When the offers are priced in more than one currency,
      * totals are compared by their exact (unrounded) amount in the comparison
@@ -276,15 +366,15 @@ final class ProductOfferComparison
      * order (the first offer wins), as in the single-currency case.
      *
      * @param  list<ComparedOffer>  $public  already in listing order
+     * @param  array<int, numeric-string|null>  $amounts  keyed by offer id
      */
-    private function lowestTotal(array $public, DateTimeImmutable $now): ?Money
+    private function lowestTotal(array $public, array $amounts): ?Money
     {
-        $amounts = $this->comparableAmounts($public, $now);
         $lowest = null;
         $lowestAmount = null;
 
-        foreach ($public as $index => $offer) {
-            $amount = $amounts[$index];
+        foreach ($public as $offer) {
+            $amount = $amounts[$offer->offerId];
 
             if ($amount !== null && ($lowestAmount === null || bccomp($amount, $lowestAmount, self::COMPARISON_SCALE) < 0)) {
                 $lowest = $offer->price->total;
@@ -296,28 +386,47 @@ final class ProductOfferComparison
     }
 
     /**
-     * Each offer's total as a comparable amount: its own minor units when all
-     * offers share one currency (no rate needed), else minor units of the
-     * comparison currency (null when no rate is known).
+     * Each offer's total as a comparable amount, keyed by offer id: its own
+     * minor units when all offers share one currency (no rate needed), else
+     * minor units of the comparison currency (null when no rate is known).
      *
      * @param  list<ComparedOffer>  $public
-     * @return list<numeric-string|null>
+     * @return array<int, numeric-string|null>
      */
-    private function comparableAmounts(array $public, DateTimeImmutable $now): array
+    private function comparableAmounts(array $public, ?ComparisonRates $rates): array
     {
-        $currencies = array_values(array_unique(array_map(static fn (ComparedOffer $offer): string => $offer->price->total->currency, $public)));
-        $target = count($currencies) === 1 ? $currencies[0] : (string) config('comparo.comparison_currency');
+        $single = count(self::currenciesOf($public)) <= 1;
+        $amounts = [];
 
-        $conversions = [];
-        foreach ($currencies as $currency) {
-            $conversions[$currency] = $currency === $target ? null : $this->exchangeRates->conversionEitherWay($currency, $target, $now);
+        foreach ($public as $offer) {
+            $amounts[$offer->offerId] = $single ? (string) $offer->price->total->minor : $rates?->exactMinor($offer->price->total);
         }
 
-        return array_map(static function (ComparedOffer $offer) use ($target, $conversions): ?string {
-            $total = $offer->price->total;
+        return $amounts;
+    }
 
-            return $total->currency === $target ? (string) $total->minor : $conversions[$total->currency]?->exactMinor($total);
-        }, $public);
+    /**
+     * @param  list<ComparedOffer>  $offers
+     * @return list<string>
+     */
+    private static function currenciesOf(array $offers): array
+    {
+        return array_values(array_unique(array_map(static fn (ComparedOffer $offer): string => $offer->price->total->currency, $offers)));
+    }
+
+    /**
+     * Compares two exact amounts; an unknown amount (null) sorts last.
+     *
+     * @param  numeric-string|null  $a
+     * @param  numeric-string|null  $b
+     */
+    private static function compareAmounts(?string $a, ?string $b): int
+    {
+        if ($a === null || $b === null) {
+            return ($a === null) <=> ($b === null);
+        }
+
+        return bccomp($a, $b, self::COMPARISON_SCALE);
     }
 
     /**

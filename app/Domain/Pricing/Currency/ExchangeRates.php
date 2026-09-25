@@ -55,4 +55,23 @@ final class ExchangeRates
     {
         return $this->conversion($from, $to, $at) ?? $this->conversion($to, $from, $at)?->inverse();
     }
+
+    /**
+     * The conversion table from each of `$currencies` into `$target`, with the
+     * rates valid at `$at` (either direction). A currency without a known rate
+     * maps to null, so callers can leave its amounts out of comparisons.
+     *
+     * @param  list<string>  $currencies
+     */
+    public function comparisonRates(array $currencies, string $target, DateTimeImmutable $at): ComparisonRates
+    {
+        $conversions = [];
+        foreach (array_unique($currencies) as $currency) {
+            if ($currency !== $target) {
+                $conversions[$currency] = $this->conversionEitherWay($currency, $target, $at);
+            }
+        }
+
+        return new ComparisonRates($target, $conversions);
+    }
 }
