@@ -1,14 +1,17 @@
 # Implementation status
 
-Updated 2026-09-25 (end of the Phase 0 + first Phase 1 slice run). Status values only:
+Updated 2026-09-25 (end of Phase 2 — merchant feeds + canonical matching, Gate C). Status values only:
 NOT STARTED · IN PROGRESS · FUNCTIONAL · PARITY VERIFIED · PRODUCTION HARDENED.
 Nothing below is PRODUCTION HARDENED yet: no production deployment, load test or security audit exists.
 No browser (manual or automated E2E) verification of authenticated merchant/staff pages has been run yet
 for the Phase 2 feeds/matching UI — coverage below is Pest Feature/Unit tests only.
 
-**Quality gates:** to be refreshed at Gate C (the orchestrator fills in current Pest/assertion counts,
-Pint/Larastan/parity/`npm` results and the prototype-file checksum count once the Phase 2 backend
-refactor in progress lands).
+**Quality gates at Phase 2 Gate C** (2026-09-25): Pest **1 298 tests** green on SQLite (7 247 assertions)
+**and** on PostgreSQL 18.4 (embedded, local; CI uses PostgreSQL 16) (7 244 assertions — driver-specific
+schema assertions differ), Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean
+(incl. matching + anomalies fixtures), `npm run types:check` / `check` (1 warning in the parity exporter)
+/ `build:ssr` green, `php artisan comparo:verify-prototype` 137/137. GitHub Actions has never run (no
+git remote).
 
 ## Modules
 

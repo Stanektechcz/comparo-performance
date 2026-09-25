@@ -114,8 +114,11 @@ for auto/confirmed matches; then `ReconcileMissingListings`, **then**
 run) → `FinalizeFeedRun` (metrics, source state, `FeedImported`/`FeedFailed`). There is no separate
 `NormaliseFeedItems` job. Every job: `tries`, `timeout`, `backoff()`, failure transition, ids only in
 payloads, correlation id restored into `Context`. Queue `retry_after` must exceed the longest job
-timeout (dedicated connection settings + Horizon supervisors per queue; queue connection defaults are
-being finalised alongside this doc pass — see `docs/implementation-status.md`).
+timeout: the long-running connection follows the queue driver (`sync` → `sync`, `database` →
+`database-long`, `redis` → `redis-long`, override `QUEUE_LONG_CONNECTION`; `retry_after` 960 s) and
+`App\Domain\Platform\Queues\LongRunningQueue` refuses a connection whose `retry_after` does not exceed
+the longest feed job timeout (900 s). Horizon has one supervisor per queue on `redis-long`. Matching
+primes candidate narrowing once per chunk (EAN and brand prefetch).
 
 **Auto-publish:** bucket `auto` (≥ 90) publishes when feature `matching-auto-publish` is on (default
 on in local/testing, configurable); bucket `confirm` (65–89) waits in the review queue unpublished;

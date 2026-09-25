@@ -8,10 +8,10 @@ A new session resumes by reading `CLAUDE.md`, this file, `state.json` and
 
 | Item | Value |
 |---|---|
-| Phase | **2 — Merchant feeds + canonical matching** (IN PROGRESS) |
-| Slice | Phase 2 analysis → task graph → FeedSource/FeedRun foundation |
-| Branch | `main` holds the verified baseline (`fe8c42b`); Phase 2 work happens on `phase-2/feeds-matching` and is fast-forwarded into `main` at Gate C |
-| Last green full gate | 2026-09-25 — Pest 142 tests / 2 725 assertions (SQLite), Pint clean, Larastan L7 0 errors, parity fixtures current, `types:check` / `check` / `build:ssr` green, prototype 137/137 |
+| Phase | **3 — Search & discovery** (IN PROGRESS; Phase 2 DONE at Gate C) |
+| Slice | Phase 3 analysis → task graph (search index documents, market + compliance filtering, suggest, zero-result analytics) |
+| Branch | `main` includes Phase 2 (fast-forwarded after Gate C); Phase 3 work happens on `phase-3/search` |
+| Last green full gate | 2026-09-25 Phase 2 Gate C — Pest 1 298 tests on SQLite (7 247 assertions) and PostgreSQL (7 244), Pint clean, Larastan L7 0 errors, parity current, `types:check` / `check` / `build:ssr` green, prototype 137/137 |
 | Next task | see `state.json → next_task` and [TASK-GRAPH.md](TASK-GRAPH.md) |
 
 ## Session start protocol

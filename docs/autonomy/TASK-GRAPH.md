@@ -21,8 +21,8 @@ dependencies are DONE may be READY. "Files" is the exclusive ownership while IN_
 | P2-12 | Merchant HTTP: feeds CRUD, mapping (sample rows), runs, errors, run trigger, matching queues/decisions, context switch | P2-11 | merchant-platform-engineer → `task-deep` | security-reviewer | routes/merchant.php, app/Http/Controllers/Merchant, app/Http/Requests/Merchant, app/Http/Presenters/Merchant, app/Policies, resources/js/types/merchant.ts, tests/Feature/Merchant | negative isolation for every route; analyst read-only; credentials never serialized | DONE | 3095b5f |
 | P2-13 | Staff console /admin/catalogue/matching — backend + pages (queue, evidence, decisions, candidates, conflicts, history) | P2-10 | admin-platform-engineer (full-stack) → `task-deep` | security-reviewer | routes/admin.php, app/Http/Controllers/Admin, app/Http/Requests/Admin, app/Http/Presenters/Admin, resources/js/types/admin.ts, tests/Feature/Admin | permission-gated, audited decisions | DONE | 93f70ff |
 | P2-14 | Frontend UX/a11y review + polish of the merchant and staff pages built full-stack in P2-12/P2-13 (browser check at 375 px, keyboard, dialogs) | P2-12, P2-13 | frontend-ux-engineer → `task-build` | frontend-ux-engineer review, a11y | resources/js/pages/{merchant,admin}, resources/js/components/{merchant,admin} | types/lint/build/SSR green; 375 px; keyboard dialogs | DONE (reviewed in council; fixes in P2-15b) | |
-| P2-15 | Review council + fixes | P2-14 | orchestrator + reviewers | all five | — | no open BLOCKER/MAJOR | IN_PROGRESS | |
-| P2-16 | Phase gate C (SQLite + PostgreSQL + frontend), docs (status, matrices, ADRs 0012–0015), commit, merge to main | P2-15 | orchestrator + docs-curator | — | docs/** | Gate C green | IN_PROGRESS | |
+| P2-15 | Review council + fixes | P2-14 | orchestrator + reviewers | all five | — | no open BLOCKER/MAJOR | DONE | 501b999, 7a1df7b |
+| P2-16 | Phase gate C (SQLite + PostgreSQL + frontend), docs (status, matrices, ADRs 0012–0015), commit, merge to main | P2-15 | orchestrator + docs-curator | — | docs/** | Gate C green | DONE | 23b341c + gate commit |
 
 ## Parallel waves
 

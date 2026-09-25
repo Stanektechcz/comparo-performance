@@ -1,23 +1,22 @@
 {
     "updated_at": "2026-09-25",
-    "current_phase": "phase-2",
-    "current_slice": "feeds-and-matching",
-    "branch": "phase-2/feeds-matching",
+    "current_phase": "phase-3",
+    "current_slice": "search-and-discovery",
+    "branch": "phase-3/search",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "P2-12 merchant portal (3095b5f) + review council (security PASS; architecture/performance/frontend findings)",
-    "next_task": "Integrate P2-15a (backend review fixes), P2-15b (frontend fixes), P2-16 docs; then Gate C on SQLite + PostgreSQL + frontend, merge phase-2/feeds-matching into main, start Phase 3 (Search & Discovery)",
+    "last_completed_task": "Phase 2 Gate C + merge into main",
+    "next_task": "P3-01 Phase 3 read-only analyses -> docs/architecture/phase-3-search.md + TASK-GRAPH Phase 3",
     "blocked_tasks": [],
-    "active_agents": [
-        "P2-15a backend fixes (task-deep)",
-        "P2-15b frontend fixes (task-build)",
-        "P2-16 docs-curator (task-build)"
-    ],
+    "active_agents": [],
     "last_full_test_result": {
         "date": "2026-09-25",
         "driver": "sqlite + pgsql 18 (embedded)",
-        "tests": 1253,
-        "assertions": 7079,
-        "result": "passed (one PostgreSQL run had a flaky failure, under investigation in P2-15a)"
+        "tests": 1298,
+        "assertions": {
+            "sqlite": 7247,
+            "pgsql": 7244
+        },
+        "result": "passed"
     },
     "static_analysis": {
         "pint": "passed",
@@ -26,7 +25,7 @@
     },
     "frontend": {
         "types_check": "passed",
-        "lint": "passed",
+        "lint": "passed (1 warning: parity exporter)",
         "build_ssr": "passed"
     },
     "parity_fixtures": "current",
@@ -37,5 +36,10 @@
     },
     "external_blockers": [
         "No git remote configured: GitHub Actions CI has never executed"
+    ],
+    "phases_done": [
+        "phase-0",
+        "phase-1 (first slice)",
+        "phase-2"
     ]
 }

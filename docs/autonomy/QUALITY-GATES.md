@@ -27,3 +27,4 @@ PostgreSQL run: see `docs/development/setup.md` → "Verifying against PostgreSQ
 |---|---|---|---|---|---|---|---|---|
 | 2026-09-25 | end of Phase 0 + first Phase 1 slice | 136 | 2 715 | 0 | green | current | 137/137 | no git |
 | 2026-09-25 | baseline commit `fe8c42b` (+ prototype integrity command) | 142 | 2 725 | 0 | green | current | 137/137 | no remote / CI never ran |
+| 2026-09-25 | Phase 2 Gate C (feeds + matching) | 1 298 | 7 247 (SQLite) / 7 244 (PostgreSQL) | 0 | green (1 lint warning in the parity exporter) | current (+ matching, anomalies) | 137/137 | no remote / CI never ran; no browser check of authenticated pages |

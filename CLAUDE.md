@@ -32,6 +32,8 @@ Laravel 13 modular monolith (Inertia 3 + React 19 SSR) replacing the browser pro
 - Eloquent models: `app/Models` (thin; no scoring). Domain logic: `app/Domain/{Context}`.
 - Parity fixtures: `tools/prototype-parity/export-fixtures.mjs` → `tests/Fixtures/PrototypeParity/`.
 - Status: `docs/implementation-status.md`. Decisions: `docs/adr/`, `docs/architecture/open-decisions.md`.
+- Autonomous programme (resume here): `docs/autonomy/STATE.md`, `docs/autonomy/state.json`,
+  `docs/autonomy/TASK-GRAPH.md`, `docs/autonomy/HANDOFFS.md`. Specialist agents: `.claude/agents/`.
 
 ## Commands (PHP lives in C:\php on this machine — put it on PATH first)
 
