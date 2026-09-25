@@ -45,4 +45,14 @@ final class ExchangeRates
             $rate->effective_at->toImmutable(),
         );
     }
+
+    /**
+     * Like conversion(), but falls back to inverting the most recent reverse
+     * rate (rates are usually stored from the comparison currency only).
+     * Null when no conversion is needed or neither direction is known.
+     */
+    public function conversionEitherWay(string $from, string $to, DateTimeImmutable $at): ?CurrencyConversion
+    {
+        return $this->conversion($from, $to, $at) ?? $this->conversion($to, $from, $at)?->inverse();
+    }
 }

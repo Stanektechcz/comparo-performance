@@ -26,6 +26,7 @@ use App\Domain\Pricing\MarketStats\MarketListing;
 use App\Domain\Pricing\MarketStats\MarketStats;
 use App\Domain\Pricing\MarketStats\MarketStatsCalculator;
 use App\Domain\Pricing\Queries\ProductPriceHistory;
+use App\Domain\Shared\Money;
 use App\Models\Country;
 use App\Models\Coupon;
 use App\Models\Offer;
@@ -48,6 +49,9 @@ use Illuminate\Database\Eloquent\Collection;
 final class ProductOfferComparison
 {
     private const int MAX_VALIDITY_SECONDS = 600;
+
+    /** Decimal places compared when choosing the lowest total across currencies. */
+    private const int COMPARISON_SCALE = 6;
 
     public function __construct(
         private readonly ComplianceResolver $complianceResolver,
@@ -104,10 +108,7 @@ final class ProductOfferComparison
             notShipping: $offers->count() - count($ranked),
             withheldFlagged: count($ranked) - count($public),
             bestValueOfferId: $compliance->status->isRecommendable() ? $this->bestValue($public) : null,
-            lowestTotal: $public === [] ? null : array_reduce(
-                $public,
-                static fn ($lowest, ComparedOffer $offer) => $lowest === null || $offer->price->total->isLessThan($lowest) ? $offer->price->total : $lowest,
-            ),
+            lowestTotal: $this->lowestTotal($public, $now),
             marketStats: $stats,
             weights: $weights,
             conversion: $conversion,
@@ -203,7 +204,8 @@ final class ProductOfferComparison
             freshnessHours: $freshnessHours,
             priceFlagged: $offer->isPriceFlagged(),
             price: $price,
-            displayTotal: $conversion?->convert($price->total),
+            // The market-currency conversion only applies to totals in the comparison currency.
+            displayTotal: $conversion !== null && $price->total->currency === $conversion->from ? $conversion->convert($price->total) : null,
             rank: $rank,
             trust: $trust,
             priceConfidence: $this->priceConfidence->evaluate(new PriceConfidenceInput(
@@ -263,6 +265,59 @@ final class ProductOfferComparison
         $lows = $this->priceHistory->dailyLows($productId, $now)['lows'];
 
         return $lows === [] ? 0 : $this->historyAnalyzer->stats($lows)->median;
+    }
+
+    /**
+     * The lowest landed total of the public offers, reported in that offer's
+     * own currency. When the offers are priced in more than one currency,
+     * totals are compared by their exact (unrounded) amount in the comparison
+     * currency at the dated rate valid at `$now`; a total whose currency has
+     * no known rate cannot be compared and is skipped. Ties keep the listing
+     * order (the first offer wins), as in the single-currency case.
+     *
+     * @param  list<ComparedOffer>  $public  already in listing order
+     */
+    private function lowestTotal(array $public, DateTimeImmutable $now): ?Money
+    {
+        $amounts = $this->comparableAmounts($public, $now);
+        $lowest = null;
+        $lowestAmount = null;
+
+        foreach ($public as $index => $offer) {
+            $amount = $amounts[$index];
+
+            if ($amount !== null && ($lowestAmount === null || bccomp($amount, $lowestAmount, self::COMPARISON_SCALE) < 0)) {
+                $lowest = $offer->price->total;
+                $lowestAmount = $amount;
+            }
+        }
+
+        return $lowest;
+    }
+
+    /**
+     * Each offer's total as a comparable amount: its own minor units when all
+     * offers share one currency (no rate needed), else minor units of the
+     * comparison currency (null when no rate is known).
+     *
+     * @param  list<ComparedOffer>  $public
+     * @return list<numeric-string|null>
+     */
+    private function comparableAmounts(array $public, DateTimeImmutable $now): array
+    {
+        $currencies = array_values(array_unique(array_map(static fn (ComparedOffer $offer): string => $offer->price->total->currency, $public)));
+        $target = count($currencies) === 1 ? $currencies[0] : (string) config('comparo.comparison_currency');
+
+        $conversions = [];
+        foreach ($currencies as $currency) {
+            $conversions[$currency] = $currency === $target ? null : $this->exchangeRates->conversionEitherWay($currency, $target, $now);
+        }
+
+        return array_map(static function (ComparedOffer $offer) use ($target, $conversions): ?string {
+            $total = $offer->price->total;
+
+            return $total->currency === $target ? (string) $total->minor : $conversions[$total->currency]?->exactMinor($total);
+        }, $public);
     }
 
     /**

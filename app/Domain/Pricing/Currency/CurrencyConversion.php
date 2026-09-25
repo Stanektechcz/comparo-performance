@@ -14,6 +14,12 @@ use InvalidArgumentException;
  */
 final readonly class CurrencyConversion
 {
+    /** Decimal places of unrounded converted minor amounts. */
+    private const int AMOUNT_SCALE = 6;
+
+    /** Decimal places of an inverted rate (stored rates carry 10). */
+    private const int INVERSE_RATE_SCALE = 12;
+
     /** @var numeric-string */
     public string $rate;
 
@@ -33,14 +39,43 @@ final readonly class CurrencyConversion
 
     public function convert(Money $money): Money
     {
+        $product = $this->exactMinor($money);
+        // Half away from zero on the minor unit (bcadd with scale 0 truncates).
+        $rounded = bcadd($product, bccomp($product, '0', self::AMOUNT_SCALE) >= 0 ? '0.5' : '-0.5', 0);
+
+        return Money::of((int) $rounded, $this->to);
+    }
+
+    /**
+     * The converted amount in minor units of `to`, unrounded (for comparing
+     * amounts of different currencies without rounding ties).
+     *
+     * @return numeric-string
+     */
+    public function exactMinor(Money $money): string
+    {
         if ($money->currency !== $this->from) {
             throw new InvalidArgumentException("Cannot convert {$money->currency} with a {$this->from}→{$this->to} rate.");
         }
 
-        $product = bcmul((string) $money->minor, $this->rate, 6);
-        // Half away from zero on the minor unit (bcadd with scale 0 truncates).
-        $rounded = bcadd($product, bccomp($product, '0', 6) >= 0 ? '0.5' : '-0.5', 0);
+        return bcmul((string) $money->minor, $this->rate, self::AMOUNT_SCALE);
+    }
 
-        return Money::of((int) $rounded, $this->to);
+    /**
+     * The reverse conversion (1 to = 1/rate × from) from the same dated rate.
+     */
+    public function inverse(): self
+    {
+        if (bccomp($this->rate, '0', self::INVERSE_RATE_SCALE) <= 0) {
+            throw new InvalidArgumentException("Cannot invert the non-positive {$this->from}→{$this->to} rate {$this->rate}.");
+        }
+
+        return new self(
+            $this->to,
+            $this->from,
+            bcdiv('1', $this->rate, self::INVERSE_RATE_SCALE),
+            $this->source,
+            $this->effectiveAt,
+        );
     }
 }
