@@ -41,3 +41,12 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | Domain events + after-commit listeners | Phase 2 | `PriceChanged` replaces model-hook cache invalidation incrementally |
 | Direct merchant purchase links | Phase 5 | known gap: product pages still link straight to merchant URLs |
 | GDPR export/erase | ≤ Phase 15 | must not slip further |
+
+## Follow-ups discovered during Phase 2
+
+| ID | Severity | Finding | Planned |
+|---|---|---|---|
+| F-01 | MAJOR | `merchant_trust_signals` is append-only only at the model level; `merchant_id … cascadeOnDelete` silently deletes trust history when a merchant row is deleted | Phase 7/8: DB triggers + restrict FK (merchants are suspended, never deleted) |
+| F-02 | MINOR | `AssignCorrelationId` runs before TrustProxies; behind a proxy it would record the proxy IP | Phase 18 (trusted proxy setup) |
+| F-03 | MINOR | Audit system actor component stored inside `after._actor_component` | when the audit viewer is built (Phase 8) |
+| F-04 | MINOR | tools/prototype-parity/export-fixtures.mjs is 893 lines (> 800 soft ceiling) | split per-engine exporter modules when next touched |

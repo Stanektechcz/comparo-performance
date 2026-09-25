@@ -12,3 +12,18 @@ Revisit any of them by changing configuration or writing an ADR.
 | A-02 | 2026-09-25 | No git worktrees for code-writing agents yet; disjoint file ownership on a phase branch instead | worktrees lack `vendor/` + `node_modules/`; revisit when CI caches exist | CTO |
 | A-03 | 2026-09-25 | Commits carry the `Co-Authored-By: Claude` trailer; phase work on `phase-N/*` branches, fast-forwarded to `main` after Gate C | plain git history, no rewrites | repository owner |
 | A-04 | 2026-09-25 | `CLAUDE.md`, `boost.json`, `.claude/agents/`, `.claude/launch.json` are versioned; `AGENTS.md`, `.mcp.json`, `.claude/skills` stay generated/ignored | `.gitignore` edit only | repository owner |
+| A-05 | 2026-09-25 | Feed context namespace is `App\Domain\Feeds` (target architecture name), not `MerchantFeeds` | naming only | CTO |
+| A-06 | 2026-09-25 | Matching engine = intel.js Engine 2.0 (C-23); HTML `matchItem` not ported; `constructor` token quirk not replicated | ADR 0012; parity fixtures prove the rest | Head of Data |
+| A-07 | 2026-09-25 | Invalid/short GTINs are a row **warning** (`INVALID_GTIN`); the raw EAN is still used for exact matching | seed EANs are 10–11 digits; flip to reject via config later | Head of Data |
+| A-08 | 2026-09-25 | Unchanged prices write at most one `scheduled` snapshot per offer per UTC day; same-day re-runs write nothing | reconciles MERCHANT-FEEDS "daily regardless" with idempotency | Head of Data |
+| A-09 | 2026-09-25 | Runs with > 20 % rejected rows fail with `REJECT_THRESHOLD_EXCEEDED` and publish nothing | config `comparo.feeds.max_rejected_ratio` | Merchant Ops |
+| A-10 | 2026-09-25 | Missing SKUs deactivate after 2 consecutive published runs or 7 days unseen; runs that would deactivate > 50 % of listings hold deactivation | D-25 defaults, config values | Head of Data |
+| A-11 | 2026-09-25 | Unchanged-checksum runs refresh `last_seen_at` / `source_updated_at` | config `comparo.feeds.unchanged_refreshes_freshness` | Head of Data |
+| A-12 | 2026-09-25 | `URL_DOMAIN_MISMATCH` is a warning only; destination enforcement arrives with `/go` (Phase 5) | no data loss | Head of Partnerships |
+| A-13 | 2026-09-25 | Feed-level shipping is stored raw; landed shipping stays merchant-zone based | D-07 | Merchant Ops |
+| A-14 | 2026-09-25 | One owning feed source per merchant SKU; a second source sending the same SKU gets `SKU_OWNED_BY_OTHER_SOURCE` | no silent overwrites | Merchant Ops |
+| A-15 | 2026-09-25 | Creating canonical products from candidates is a Phase 8 staff catalogue action; Phase 2 staff can link a candidate to an existing product or reject it | no auto-created products | Head of Catalogue |
+| A-16 | 2026-09-25 | Staff console prefix `/admin` (Horizon stays at `/staff/horizon`) | route prefix only | CTO |
+| A-17 | 2026-09-25 | Feature flags: config-backed wrapper (`App\Domain\Platform\Features`) with optional DB overrides; Pennant only after dependency approval | wrapper hides the backend | CTO |
+| A-18 | 2026-09-25 | `confirm` bucket (65–89) stays unpublished until a merchant or staff decision; `auto` (≥ 90) publishes behind flag `matching-auto-publish` | flag can disable auto-publishing | Head of Data |
+| A-19 | 2026-09-25 | Matches to products blocked in the feed market become `compliance_hold` (unpublished, staff queue) | least exposure | Compliance Lead |

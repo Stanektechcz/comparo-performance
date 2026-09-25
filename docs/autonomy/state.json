@@ -2,16 +2,17 @@
     "updated_at": "2026-09-25",
     "current_phase": "phase-2",
     "current_slice": "feeds-and-matching",
-    "branch": "main",
+    "branch": "phase-2/feeds-matching",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "P2-00 autonomy control plane + prototype integrity command",
-    "next_task": "P2-01 synthesize Phase 2 analyses into docs/architecture/phase-2-feeds-matching.md and TASK-GRAPH.md",
+    "last_completed_task": "P2-01 Phase 2 design (docs/architecture/phase-2-feeds-matching.md) + task graph",
+    "next_task": "Integrate wave 1 (P2-02 audit, P2-03 flags/queues/context, P2-04 schema, P2-05/06 matching engine, P2-07 feed parsing), then wave 2 (P2-08 importer, P2-09 offers/pricing actions)",
     "blocked_tasks": [],
     "active_agents": [
-        "database-engineer (analysis)",
-        "feed-engineer (analysis)",
-        "matching-engineer (analysis)",
-        "architecture-guardian (analysis)"
+        "P2-02 audit (task-deep)",
+        "P2-03 platform (task-build)",
+        "P2-04 database-engineer (task-deep)",
+        "P2-05/06 matching-engineer (task-deep)",
+        "P2-07 feed-engineer (task-deep)"
     ],
     "last_full_test_result": {
         "date": "2026-09-25",
@@ -20,10 +21,22 @@
         "assertions": 2725,
         "result": "passed"
     },
-    "static_analysis": { "pint": "passed", "larastan_level": 7, "larastan_errors": 0 },
-    "frontend": { "types_check": "passed", "lint": "passed", "build_ssr": "passed" },
+    "static_analysis": {
+        "pint": "passed",
+        "larastan_level": 7,
+        "larastan_errors": 0
+    },
+    "frontend": {
+        "types_check": "passed",
+        "lint": "passed",
+        "build_ssr": "passed"
+    },
     "parity_fixtures": "current",
-    "prototype_integrity": { "protected": 137, "verified": 137, "command": "php artisan comparo:verify-prototype" },
+    "prototype_integrity": {
+        "protected": 137,
+        "verified": 137,
+        "command": "php artisan comparo:verify-prototype"
+    },
     "external_blockers": [
         "No git remote configured: GitHub Actions CI has never executed"
     ]
