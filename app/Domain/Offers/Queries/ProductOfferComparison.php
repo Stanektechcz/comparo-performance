@@ -19,18 +19,14 @@ use App\Domain\Pricing\Currency\ComparisonRates;
 use App\Domain\Pricing\Currency\CurrencyConversion;
 use App\Domain\Pricing\Currency\ExchangeRates;
 use App\Domain\Pricing\History\PriceHistoryAnalyzer;
-use App\Domain\Pricing\LandedPrice\CouponTerms;
 use App\Domain\Pricing\LandedPrice\LandedPrice;
 use App\Domain\Pricing\LandedPrice\LandedPriceCalculator;
-use App\Domain\Pricing\LandedPrice\LandedPriceInput;
-use App\Domain\Pricing\LandedPrice\ShippingTerms;
+use App\Domain\Pricing\LandedPrice\MerchantTerms;
 use App\Domain\Pricing\MarketStats\MarketListing;
 use App\Domain\Pricing\MarketStats\MarketStats;
 use App\Domain\Pricing\MarketStats\MarketStatsCalculator;
 use App\Domain\Pricing\Queries\ProductPriceHistory;
 use App\Domain\Shared\Money;
-use App\Models\Country;
-use App\Models\Coupon;
 use App\Models\Offer;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -58,6 +54,14 @@ use Illuminate\Database\Eloquent\Collection;
  * known rate is left out of the baseline, ranked without a price or shipping
  * advantage and listed after comparable offers of equal rank. Displayed
  * amounts always stay in each offer's own currency.
+ *
+ * A merchant's zone rate, free-shipping threshold and coupon amounts are
+ * first brought into each offer's currency (OfferPriceTerms, dated rates,
+ * half away from zero). An offer whose shipping cost cannot be expressed in
+ * its currency (no known rate) is left out of the comparison, the baseline
+ * and the ranking, like an offer that does not ship to the market, and is
+ * counted as `shippingUnavailable`. The pure calculator's currency checks are
+ * therefore unreachable from here: a public page never fails on them.
  */
 final class ProductOfferComparison
 {
@@ -78,6 +82,7 @@ final class ProductOfferComparison
         private readonly ProductCompletenessService $completeness,
         private readonly PriceHistoryAnalyzer $historyAnalyzer,
         private readonly PriceConfidenceService $priceConfidence,
+        private readonly OfferPriceTerms $priceTerms,
     ) {}
 
     public function compare(Product $product, MarketContext $market, DateTimeImmutable $now, ?ComplianceDecision $compliance = null): OfferComparison
@@ -91,11 +96,12 @@ final class ProductOfferComparison
         }
 
         $offers = $this->loadOffers($product, $market, $now);
-        $rates = $this->comparisonRates($offers, $now);
+        $terms = $this->priceTerms->forMarket($offers, $now);
+        $rates = $this->comparisonRates($offers, $terms, $now);
         $stats = $this->marketStats->calculate(array_values($offers->map(static fn (Offer $offer): MarketListing => new MarketListing(
             $offer->price_minor,
-            $offer->merchant->shippingZones->first()?->cost_minor,
-            $offer->merchant->free_shipping_threshold_minor,
+            ($terms[$offer->id] ?? null)?->shipping?->costMinor,
+            ($terms[$offer->id] ?? null)?->freeShippingThreshold?->minor,
             $offer->currency,
         ))->all()), $rates);
 
@@ -104,10 +110,12 @@ final class ProductOfferComparison
 
         $ranked = [];
         foreach ($offers as $offer) {
-            if ($offer->merchant->shippingZones->isEmpty()) {
+            $offerTerms = $terms[$offer->id] ?? null;
+
+            if ($offerTerms === null) {
                 continue;
             }
-            $ranked[] = $this->evaluate($offer, $market, $compliance, $stats, $rates, $completeness, $historyMedian, $weights, $conversion, $now);
+            $ranked[] = $this->evaluate($offer, $offerTerms, $market, $compliance, $stats, $rates, $completeness, $historyMedian, $weights, $conversion, $now);
         }
 
         $public = array_values(array_filter($ranked, static fn (ComparedOffer $offer): bool => $offer->isPublishable()));
@@ -120,7 +128,7 @@ final class ProductOfferComparison
             offers: $public,
             ranked: $ranked,
             totalOffers: $offers->count(),
-            notShipping: $offers->count() - count($ranked),
+            notShipping: $offers->count() - count($terms),
             withheldFlagged: count($ranked) - count($public),
             bestValueOfferId: $compliance->status->isRecommendable() ? $this->bestValue($public) : null,
             lowestTotal: $this->lowestTotal($public, $amounts),
@@ -129,6 +137,7 @@ final class ProductOfferComparison
             conversion: $conversion,
             evaluatedAt: $now,
             validUntil: $this->validUntil($offers, $now),
+            shippingUnavailable: count($terms) - count($ranked),
         );
     }
 
@@ -156,6 +165,7 @@ final class ProductOfferComparison
 
     private function evaluate(
         Offer $offer,
+        MerchantTerms $terms,
         MarketContext $market,
         ComplianceDecision $compliance,
         MarketStats $stats,
@@ -167,17 +177,11 @@ final class ProductOfferComparison
         DateTimeImmutable $now,
     ): ComparedOffer {
         $merchant = $offer->merchant;
-        $zone = $merchant->shippingZones->first();
 
-        $price = $this->landedPrice->calculate(new LandedPriceInput(
-            priceMinor: $offer->price_minor,
-            currency: $offer->currency,
-            marketCode: $market->code,
-            priceFlagged: $offer->isPriceFlagged(),
-            shipping: $zone === null ? null : new ShippingTerms($zone->cost_minor, $zone->currency, $zone->min_days, $zone->max_days, $zone->carrier),
-            freeShippingThresholdMinor: $merchant->free_shipping_threshold_minor,
-            coupons: array_values($merchant->coupons->map(fn (Coupon $coupon): CouponTerms => $this->couponTerms($coupon))->all()),
-        ), $now);
+        $price = $this->landedPrice->calculate(
+            $terms->toInput($offer->price_minor, $offer->currency, $market->code, $offer->isPriceFlagged()),
+            $now,
+        );
 
         $trust = $this->merchantScores->trust($merchant);
         $freshnessHours = ($now->getTimestamp() - $offer->source_updated_at->getTimestamp()) / 3600;
@@ -238,25 +242,6 @@ final class ProductOfferComparison
         );
     }
 
-    private function couponTerms(Coupon $coupon): CouponTerms
-    {
-        return new CouponTerms(
-            id: $coupon->id,
-            code: $coupon->code,
-            title: $coupon->title,
-            type: $coupon->type,
-            percentOffBasisPoints: $coupon->percent_off === null ? null : (int) round((float) $coupon->percent_off * 100),
-            amountOffMinor: $coupon->amount_off_minor,
-            minOrderMinor: $coupon->min_order_minor,
-            currency: $coupon->currency,
-            marketCodes: array_values($coupon->countries->map(static fn (Country $country): string => $country->code)->all()),
-            startsAt: $coupon->starts_at?->toImmutable(),
-            endsAt: $coupon->ends_at->toImmutable(),
-            state: $coupon->verification_state,
-            exclusive: $coupon->is_exclusive,
-        );
-    }
-
     private function completenessOf(Product $product): ProductCompleteness
     {
         $product->loadCount([
@@ -286,16 +271,17 @@ final class ProductOfferComparison
     }
 
     /**
-     * The comparison rates of the offers shipping to the market, or null when
+     * The comparison rates of the offers priced for the market, or null when
      * they are all priced in one currency (then no rate is needed or loaded).
      *
      * @param  Collection<int, Offer>  $offers
+     * @param  array<int, MerchantTerms|null>  $terms  keyed by offer id
      */
-    private function comparisonRates(Collection $offers, DateTimeImmutable $now): ?ComparisonRates
+    private function comparisonRates(Collection $offers, array $terms, DateTimeImmutable $now): ?ComparisonRates
     {
         $currencies = [];
         foreach ($offers as $offer) {
-            if ($offer->merchant->shippingZones->isNotEmpty()) {
+            if (($terms[$offer->id] ?? null) !== null) {
                 $currencies[$offer->currency] = $offer->currency;
             }
         }

@@ -17,6 +17,10 @@ use DateTimeImmutable;
  * publishable, in organic ComparoRank order). `ranked` keeps every shipping
  * offer (including withheld ones) for audit and parity checks; it must never
  * be serialized publicly.
+ *
+ * Every loaded offer is either listed or counted once: `notShipping` (no zone
+ * in the market), `shippingUnavailable` (a zone whose cost cannot be expressed
+ * in the offer currency — no known rate) or `withheldFlagged` (not publishable).
  */
 final readonly class OfferComparison
 {
@@ -39,6 +43,7 @@ final readonly class OfferComparison
         public ?CurrencyConversion $conversion,
         public DateTimeImmutable $evaluatedAt,
         public DateTimeImmutable $validUntil,
+        public int $shippingUnavailable = 0,
     ) {}
 
     public function isPurchasable(): bool

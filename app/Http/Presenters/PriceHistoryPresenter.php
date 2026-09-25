@@ -4,6 +4,7 @@ namespace App\Http\Presenters;
 
 use App\Domain\Pricing\History\PriceHistoryAnalyzer;
 use App\Domain\Pricing\Queries\ProductPriceHistory;
+use App\Domain\Shared\Money;
 use App\Models\Product;
 use DateTimeImmutable;
 
@@ -27,10 +28,12 @@ final class PriceHistoryPresenter
     /**
      * Price intelligence compares the best eligible landed total (when there
      * is one) with the product's daily lowest-price series, as the prototype does.
+     * A total in another currency than the series is never compared with it:
+     * the series' own latest low is used instead.
      *
      * @return array<string, mixed>
      */
-    public function present(Product $product, ?int $currentTotalMinor, DateTimeImmutable $now): array
+    public function present(Product $product, ?Money $currentTotal, DateTimeImmutable $now): array
     {
         $series = $this->history->dailyLows($product->id, $now);
 
@@ -39,7 +42,9 @@ final class PriceHistoryPresenter
         }
 
         $stats = $this->analyzer->stats($series['lows']);
-        $current = $currentTotalMinor ?? $stats->current;
+        $current = $currentTotal !== null && $currentTotal->currency === $series['currency']
+            ? $currentTotal->minor
+            : $stats->current;
 
         return [
             'currency' => $series['currency'],

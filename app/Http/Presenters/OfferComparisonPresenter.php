@@ -30,6 +30,14 @@ use Illuminate\Support\Facades\Cache;
  */
 final class OfferComparisonPresenter
 {
+    /**
+     * Cache format tokens: bumped whenever a presented shape changes, so an
+     * entry cached before a deploy is never served in the old shape.
+     */
+    private const string PAGE_FORMAT = 'page-v2';
+
+    private const string API_FORMAT = 'api-v1-r2';
+
     public function __construct(
         private readonly ProductOfferComparison $comparison,
         private readonly CatalogCacheVersion $versions,
@@ -37,11 +45,14 @@ final class OfferComparisonPresenter
     ) {}
 
     /**
-     * @return array{compliance: array<string, mixed>, offers: list<array<string, mixed>>, offerSummary: array<string, mixed>, topEligibleTotal: int|null}
+     * `topEligibleTotal` is the best-buy-eligible offer's landed total in that
+     * offer's own currency (server-side only, for price intelligence).
+     *
+     * @return array{compliance: array<string, mixed>, offers: list<array<string, mixed>>, offerSummary: array<string, mixed>, topEligibleTotal: Money|null}
      */
     public function forPage(Product $product, MarketContext $market, DateTimeImmutable $now): array
     {
-        return $this->cached($product, $market, $now, 'page', fn (OfferComparison $comparison): array => [
+        return $this->cached($product, $market, $now, self::PAGE_FORMAT, fn (OfferComparison $comparison): array => [
             'compliance' => self::compliance($comparison->compliance),
             'offers' => array_map(fn (ComparedOffer $offer): array => $this->offerRow($offer, $comparison), $comparison->offers),
             'offerSummary' => [
@@ -49,6 +60,7 @@ final class OfferComparisonPresenter
                 'shown' => count($comparison->offers),
                 'withheldFlagged' => $comparison->withheldFlagged,
                 'notShipping' => $comparison->notShipping,
+                'shippingUnavailable' => $comparison->shippingUnavailable,
                 'lowestTotal' => MoneyPresenter::present($comparison->lowestTotal),
                 'bestValueOfferId' => $comparison->bestValueOfferId,
             ],
@@ -59,17 +71,22 @@ final class OfferComparisonPresenter
     /**
      * Public API v1 shape (snake_case), see API-ENDPOINTS.md "GET /products/{slug}/offers".
      *
+     * `meta.market_min` is in `meta.market_min_currency`: the offers' own
+     * currency when they share one, the comparison currency (`meta.currency`)
+     * when they span several; both are null without a market minimum.
+     *
      * @return array{data: list<array<string, mixed>>, meta: array<string, mixed>}
      */
     public function forApi(Product $product, MarketContext $market, DateTimeImmutable $now): array
     {
-        return $this->cached($product, $market, $now, 'api-v1', fn (OfferComparison $comparison): array => [
+        return $this->cached($product, $market, $now, self::API_FORMAT, fn (OfferComparison $comparison): array => [
             'data' => array_map(fn (ComparedOffer $offer): array => $this->apiOffer($offer, $comparison), $comparison->offers),
             'meta' => [
                 'country' => $market->code,
                 'currency' => (string) config('comparo.comparison_currency'),
                 'display_currency' => $market->currency,
                 'market_min' => $comparison->marketStats->minTotalMinor ?: null,
+                'market_min_currency' => $comparison->marketStats->minTotalMinor > 0 ? $comparison->marketStats->currency : null,
                 'compliance' => $comparison->compliance->status->value,
                 'purchasable' => $comparison->isPurchasable(),
                 'ranking_version' => $comparison->weights->version,
@@ -79,6 +96,8 @@ final class OfferComparisonPresenter
                     // Blocked products reveal nothing derived from withheld offers — not even a count.
                     'compliance_blocked' => $comparison->compliance->status->offersVisible() ? 0 : null,
                     'price_anomaly' => $comparison->withheldFlagged,
+                    // Ships to the market, but the shipping cost has no known rate into the offer currency.
+                    'shipping_unavailable' => $comparison->shippingUnavailable,
                 ],
             ],
         ]);
@@ -265,11 +284,11 @@ final class OfferComparisonPresenter
         ];
     }
 
-    private function topEligibleTotal(OfferComparison $comparison): ?int
+    private function topEligibleTotal(OfferComparison $comparison): ?Money
     {
         foreach ($comparison->offers as $offer) {
             if ($offer->rank->eligibleBestBuy) {
-                return $offer->price->total->minor;
+                return $offer->price->total;
             }
         }
 

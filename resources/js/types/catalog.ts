@@ -227,6 +227,8 @@ export type OfferSummary = {
     withheldFlagged: number;
     /** Offers from shops that do not deliver to this market. */
     notShipping: number;
+    /** Offers from shops that deliver here, but whose shipping cost has no known exchange rate into the offer currency. */
+    shippingUnavailable: number;
     lowestTotal: Money | null;
     bestValueOfferId: number | null;
 };
