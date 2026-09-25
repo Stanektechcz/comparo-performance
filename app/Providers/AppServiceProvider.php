@@ -2,8 +2,13 @@
 
 namespace App\Providers;
 
+use App\Domain\Offers\Events\OfferDeactivated;
+use App\Domain\Offers\Events\OfferPublished;
+use App\Domain\Offers\Events\OfferRelinked;
 use App\Domain\Platform\Cache\CatalogCacheVersion;
+use App\Domain\Platform\Listeners\BumpProductCacheVersion;
 use App\Domain\Platform\Markets\MarketResolver;
+use App\Domain\Pricing\Events\PriceChanged;
 use App\Models\Country;
 use App\Models\Coupon;
 use App\Models\MerchantRiskEvent;
@@ -16,6 +21,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -38,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->configureRateLimiting();
         $this->invalidateCatalogCacheOnChange();
+        $this->registerDomainListeners();
     }
 
     /**
@@ -70,15 +77,40 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Cached comparisons are keyed by a per-product version token; any change
      * that can move a price, a coupon, shipping, trust or compliance bumps it.
-     * (Phase 2 replaces these model hooks with domain events + queued listeners.)
+     *
+     * Offers are published through domain actions whose after-commit events
+     * bump the version ({@see self::registerDomainListeners()}). The Offer
+     * hooks remain as a safety net for direct writes (tests, tinker, imports):
+     * they bump only when the row really changed, after the transaction
+     * commits, and bump the original product too when an offer moved.
      */
     protected function invalidateCatalogCacheOnChange(): void
     {
         $versions = fn (): CatalogCacheVersion => $this->app->make(CatalogCacheVersion::class);
 
-        $byProduct = static fn (Offer|ProductComplianceRule $model) => $versions()->bumpProduct($model->product_id);
-        Offer::saved($byProduct);
-        Offer::deleted($byProduct);
+        $bumpAfterCommit = static function (array $productIds) use ($versions): void {
+            DB::afterCommit(static function () use ($versions, $productIds): void {
+                foreach (array_unique($productIds) as $productId) {
+                    $versions()->bumpProduct($productId);
+                }
+            });
+        };
+
+        Offer::saved(static function (Offer $offer) use ($bumpAfterCommit): void {
+            if (! $offer->wasRecentlyCreated && ! $offer->wasChanged()) {
+                return;
+            }
+
+            $productIds = [$offer->product_id];
+            if ($offer->wasChanged('product_id') && $offer->getOriginal('product_id') !== null) {
+                $productIds[] = (int) $offer->getOriginal('product_id');
+            }
+
+            $bumpAfterCommit($productIds);
+        });
+        Offer::deleted(static fn (Offer $offer) => $bumpAfterCommit([$offer->product_id]));
+
+        $byProduct = static fn (ProductComplianceRule $model) => $versions()->bumpProduct($model->product_id);
         ProductComplianceRule::saved($byProduct);
         ProductComplianceRule::deleted($byProduct);
 
@@ -95,5 +127,15 @@ class AppServiceProvider extends ServiceProvider
         $forgetMarkets = fn () => $this->app->make(MarketResolver::class)->forget();
         Country::saved($forgetMarkets);
         Country::deleted($forgetMarkets);
+    }
+
+    /**
+     * Domain listeners outside app/Listeners are not auto-discovered.
+     */
+    protected function registerDomainListeners(): void
+    {
+        foreach ([OfferPublished::class, OfferDeactivated::class, OfferRelinked::class, PriceChanged::class] as $event) {
+            Event::listen($event, BumpProductCacheVersion::class);
+        }
     }
 }
