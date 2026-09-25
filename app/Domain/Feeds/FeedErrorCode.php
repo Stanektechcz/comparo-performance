@@ -28,6 +28,10 @@ enum FeedErrorCode: string
     case RowLimitExceeded = 'ROW_LIMIT_EXCEEDED';
     case RejectThresholdExceeded = 'REJECT_THRESHOLD_EXCEEDED';
     case Stalled = 'STALLED';
+    /** URL fetching is switched off by the `feed-url-fetch` feature flag. */
+    case FetchDisabled = 'FETCH_DISABLED';
+    /** An unexpected pipeline failure; details are logged server-side only. */
+    case InternalError = 'INTERNAL_ERROR';
 
     // Row-reject
     case MissingSku = 'MISSING_SKU';
@@ -64,7 +68,9 @@ enum FeedErrorCode: string
             self::EmptyFeed,
             self::RowLimitExceeded,
             self::RejectThresholdExceeded,
-            self::Stalled => FeedIssueSeverity::Fatal,
+            self::Stalled,
+            self::FetchDisabled,
+            self::InternalError => FeedIssueSeverity::Fatal,
 
             self::MissingSku,
             self::MissingRequiredField,

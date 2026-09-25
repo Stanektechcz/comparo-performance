@@ -50,6 +50,49 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Merchant feeds (docs/architecture/phase-2-feeds-matching.md §5, §7)
+    |--------------------------------------------------------------------------
+    |
+    | `disk` must be a local, private disk: payloads are streamed to it and
+    | parsed from the local path, and are never public or executed.
+    |
+    */
+
+    'feeds' => [
+        'disk' => env('COMPARO_FEEDS_DISK', 'local'),
+        // A-09: more rejected rows than this ratio fails the run, nothing is published.
+        'max_rejected_ratio' => (float) env('COMPARO_FEEDS_MAX_REJECTED_RATIO', 0.2),
+        // A-10: reconciliation of SKUs missing from published runs (P2-11b).
+        'missing_runs_before_deactivation' => 2,
+        'unseen_days_before_deactivation' => 7,
+        'mass_removal_ratio' => 0.5,
+        // A-11: an unchanged payload re-confirms last_seen_at / source_updated_at.
+        'unchanged_refreshes_freshness' => (bool) env('COMPARO_FEEDS_UNCHANGED_REFRESHES_FRESHNESS', true),
+        // feed_errors rows stored per run and code; run metrics keep the true totals.
+        'max_errors_per_code' => 1000,
+        'payload_retention_days' => 30,
+        'item_retention_days' => 7,
+        // Staged items of this many latest successful runs per source are never pruned.
+        'item_retention_keep_successful_runs' => 2,
+        'max_rows' => 200_000,
+        'max_payload_bytes' => 100 * 1024 * 1024,
+        'manual_run_cooldown_minutes' => 15,
+        'consecutive_failures_before_error' => 3,
+        'preview_rows' => 20,
+        // Minutes a run may stay in one stage before the reaper fails it as STALLED.
+        // fetching covers 3 attempts × 300 s timeout plus the 60/300/900 s backoff.
+        'stage_deadlines_minutes' => [
+            'queued' => 60,
+            'fetching' => 45,
+            'parsing' => 30,
+            'normalizing' => 30,
+            'matching' => 60,
+            'publishing' => 60,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Demo data
     |--------------------------------------------------------------------------
     |

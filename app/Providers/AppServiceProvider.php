@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Domain\Feeds\Fetching\DnsHostResolver;
+use App\Domain\Feeds\Fetching\FeedFetcher;
+use App\Domain\Feeds\Fetching\HostResolver;
 use App\Domain\Offers\Events\OfferDeactivated;
 use App\Domain\Offers\Events\OfferPublished;
 use App\Domain\Offers\Events\OfferRelinked;
@@ -18,6 +21,8 @@ use App\Models\Offer;
 use App\Models\ProductComplianceRule;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +38,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->registerFeedFetcher();
+    }
+
+    /**
+     * The feed fetcher gets its own HTTP client factory WITHOUT an event
+     * dispatcher: request/response events carry the auth headers and the
+     * token-bearing URL, so they must never reach HTTP client listeners
+     * (Telescope, Nightwatch, Pulse, logging).
+     */
+    protected function registerFeedFetcher(): void
+    {
+        $this->app->bind(HostResolver::class, DnsHostResolver::class);
+        $this->app->bind(FeedFetcher::class, static fn (Application $app): FeedFetcher => new FeedFetcher(
+            new HttpFactory,
+            $app->make(HostResolver::class),
+        ));
     }
 
     /**

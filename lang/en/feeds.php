@@ -28,6 +28,8 @@ return [
         'ROW_LIMIT_EXCEEDED' => 'The feed has more than :limit products, which is the maximum per feed. Split it into several feeds.',
         'REJECT_THRESHOLD_EXCEEDED' => 'More than :percent% of rows failed validation, so nothing was published. Fix the rejected rows below and run the import again.',
         'STALLED' => 'The import stopped responding and was cancelled. Nothing was published; run the import again.',
+        'FETCH_DISABLED' => 'Fetching feeds from a URL is temporarily switched off by Comparo. Nothing was published; upload the feed file instead or run the import again later.',
+        'INTERNAL_ERROR' => 'Something went wrong on our side while importing this feed. Nothing was published and the problem was logged for our team; run the import again later.',
 
         // Row-reject
         'MISSING_SKU' => 'This row has no merchant SKU, so it was skipped. Give every product a unique SKU in the mapped SKU column.',

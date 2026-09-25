@@ -7,6 +7,8 @@ use App\Domain\Feeds\FeedRunStatus;
 use App\Domain\Feeds\FeedRunTrigger;
 use Database\Factories\FeedRunFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -112,6 +114,29 @@ class FeedRun extends Model
     public function isTerminal(): bool
     {
         return $this->status->isTerminal();
+    }
+
+    /**
+     * Non-terminal runs (the predicate of the `feed_runs_single_active` index).
+     *
+     * @param  Builder<FeedRun>  $query
+     */
+    #[Scope]
+    protected function active(Builder $query): void
+    {
+        $query->whereIn('status', FeedRunStatus::activeValues());
+    }
+
+    /**
+     * Completed runs that published their rows (not `unchanged`).
+     *
+     * @param  Builder<FeedRun>  $query
+     */
+    #[Scope]
+    protected function successful(Builder $query): void
+    {
+        $query->where('status', FeedRunStatus::Completed->value)
+            ->whereIn('outcome', [FeedRunOutcome::Published->value, FeedRunOutcome::PublishedWithWarnings->value]);
     }
 
     /**
