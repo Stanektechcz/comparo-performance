@@ -31,6 +31,9 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  */
 final class MatchingCatalogue
 {
+    /** Bound on the ids in one whereIn (SQLite/PostgreSQL parameter limits). */
+    private const int ID_CHUNK = 500;
+
     /**
      * Every ACTIVE product as a matching candidate, ordered by product id
      * (the application-level tie-break the engine relies on). Eager-loads
@@ -40,8 +43,45 @@ final class MatchingCatalogue
      */
     public function candidates(): array
     {
+        return $this->load(null);
+    }
+
+    /**
+     * The given products as matching candidates — only those that are ACTIVE,
+     * ordered by product id (unknown or inactive ids are skipped). Used by
+     * {@see CandidateProducts} for narrowed matching and by manual decisions.
+     *
+     * @param  list<int>  $productIds
+     * @return list<CandidateProduct>
+     */
+    public function candidatesFor(array $productIds): array
+    {
+        $productIds = array_values(array_unique($productIds));
+
+        if ($productIds === []) {
+            return [];
+        }
+
+        $candidates = [];
+
+        foreach (array_chunk($productIds, self::ID_CHUNK) as $chunk) {
+            $candidates = [...$candidates, ...$this->load($chunk)];
+        }
+
+        usort($candidates, static fn (CandidateProduct $a, CandidateProduct $b): int => $a->productId <=> $b->productId);
+
+        return $candidates;
+    }
+
+    /**
+     * @param  ?list<int>  $productIds  null = the whole active catalogue
+     * @return list<CandidateProduct>
+     */
+    private function load(?array $productIds): array
+    {
         $products = Product::query()
             ->where('status', ProductStatus::Active)
+            ->when($productIds !== null, fn ($query) => $query->whereIn('id', $productIds ?? []))
             ->orderBy('id')
             ->with([
                 'brand:id,name',
