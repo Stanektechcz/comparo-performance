@@ -19,6 +19,14 @@ use App\Domain\Pricing\CouponType;
 use App\Domain\Pricing\LandedPrice\CouponTerms;
 use App\Domain\Pricing\LandedPrice\LandedPriceInput;
 use App\Domain\Pricing\LandedPrice\ShippingTerms;
+use App\Domain\Search\DidYouMean;
+use App\Domain\Search\DidYouMeanSuggestion;
+use App\Domain\Search\Local\EntryAttributes;
+use App\Domain\Search\Local\SearchableEntry;
+use App\Domain\Search\Local\SearchableType;
+use App\Domain\Search\Relevance\JsString;
+use App\Domain\Search\Relevance\PrototypeRelevance;
+use App\Domain\Search\Relevance\RelevanceHit;
 use DateTimeImmutable;
 use DateTimeZone;
 use UnexpectedValueException;
@@ -352,6 +360,156 @@ final class PrototypeFixtures
             'parts' => array_map(static fn (MatchPart $part): array => ['label' => MatchPartLabel::english($part), 'pts' => $part->points], $result->parts),
             'rawPoints' => $result->rawPoints,
         ];
+    }
+
+    /**
+     * The seed catalogue as search entries in DC `searchAll` insertion order:
+     * canonical products (no merges in the fixture state), brands, shops,
+     * categories, ingredients (`S.ingredients`; the id is the name, like the
+     * prototype result). Attributes carry slugs and ratings only; no market
+     * data (the prototype does not filter search by market).
+     *
+     * @return list<SearchableEntry>
+     */
+    public static function searchEntries(): array
+    {
+        $seed = self::seed();
+        $brands = self::indexed('brands');
+        $categories = self::indexed('categories');
+        $ingredientSlugs = array_column($seed['ingredientEntities'], 'slug', 'name');
+        $ratings = self::derived()['productRatings'];
+        $entries = [];
+
+        foreach ($seed['products'] as $product) {
+            $brand = $brands[$product['brandId']];
+            $category = $categories[$product['categoryId']];
+            $rating = $ratings[(string) $product['id']] ?? null;
+            $ingredients = array_map(self::string(...), $product['ingredients']);
+
+            $entries[] = SearchableEntry::product(
+                id: (int) $product['id'],
+                name: self::string($product['name']),
+                brandName: self::string($brand['name']),
+                ingredientNames: $ingredients,
+                categoryName: self::string($category['name']),
+                sku: self::optionalString($product['sku'] ?? null),
+                ean: self::optionalString($product['ean'] ?? null),
+                attributes: new EntryAttributes(
+                    brandSlug: self::string($brand['slug']),
+                    categoryPath: [self::string($category['slug'])],
+                    ingredientSlugs: array_values(array_map(static fn (string $name): string => $ingredientSlugs[$name], $ingredients)),
+                    ratingAverage: $rating === null || $rating['count'] === 0 ? null : (float) $rating['average'],
+                    ratingCount: (int) ($rating['count'] ?? 0),
+                ),
+            );
+        }
+
+        foreach ($seed['brands'] as $brand) {
+            $entries[] = SearchableEntry::brand((int) $brand['id'], self::string($brand['name']));
+        }
+
+        foreach ($seed['merchants'] as $merchant) {
+            $entries[] = SearchableEntry::shop((int) $merchant['id'], self::string($merchant['name']), self::string($merchant['web']));
+        }
+
+        foreach ($seed['categories'] as $category) {
+            $entries[] = SearchableEntry::category((int) $category['id'], self::string($category['name']));
+        }
+
+        foreach ($seed['ingredients'] as $name) {
+            $entries[] = SearchableEntry::ingredient(self::string($name), self::string($name));
+        }
+
+        return $entries;
+    }
+
+    /**
+     * The fixture record of a search section for a query. The port trims the
+     * query once (documented deviation), so a query is compared with the
+     * prototype's answer for its trimmed text; the exporter adds every
+     * trimmed variant to the query set.
+     *
+     * @return array<string, mixed>
+     */
+    public static function searchRecord(string $section, string $query): array
+    {
+        $records = self::$cache["__search_{$section}"] ??= array_column(self::load('search')[$section], null, 'query');
+        $trimmed = JsString::trim($query);
+
+        return $records[$trimmed] ?? throw new UnexpectedValueException("No {$section} record for the trimmed query ".json_encode($trimmed).'.');
+    }
+
+    /**
+     * Every fixture query run through PrototypeRelevance. Expected lists drop
+     * articles and coupons (not searchable in Phase 3, A-25) and keep the
+     * prototype order of what remains.
+     *
+     * @return array<string, array{expected: list<array<string, mixed>>, actual: list<array<string, mixed>>}>
+     */
+    public static function searchResultCases(PrototypeRelevance $relevance): array
+    {
+        $entries = self::searchEntries();
+        $cases = [];
+
+        foreach (self::load('search')['results'] as $record) {
+            $expected = array_values(array_filter(
+                self::searchRecord('results', $record['query'])['list'],
+                static fn (array $hit): bool => ! in_array($hit['type'], ['article', 'coupon'], true),
+            ));
+            $actual = array_map(self::hitAsPrototype(...), $relevance->rank($record['query'], $entries));
+            $cases['results: '.json_encode($record['query'], JSON_UNESCAPED_UNICODE)] = ['expected' => $expected, 'actual' => $actual];
+        }
+
+        return $cases;
+    }
+
+    /**
+     * Every fixture query run through DidYouMean (the zero-result gate open,
+     * like the exporter).
+     *
+     * @return array<string, array{expected: list<array<string, mixed>>, actual: list<array<string, mixed>>}>
+     */
+    public static function didYouMeanCases(DidYouMean $didYouMean): array
+    {
+        $entries = self::searchEntries();
+        $cases = [];
+
+        foreach (self::load('search')['didYouMean'] as $record) {
+            $actual = array_map(static fn (DidYouMeanSuggestion $suggestion): array => [
+                'kind' => $suggestion->entry->type->value,
+                'label' => $suggestion->label(),
+                'score' => $suggestion->score,
+            ], $didYouMean->suggest($record['query'], $entries));
+            $cases['didYouMean: '.json_encode($record['query'], JSON_UNESCAPED_UNICODE)] = [
+                'expected' => self::searchRecord('didYouMean', $record['query'])['list'],
+                'actual' => $actual,
+            ];
+        }
+
+        return $cases;
+    }
+
+    /**
+     * A relevance hit in the fixture's `{type, id|name, score}` shape.
+     *
+     * @return array<string, int|string>
+     */
+    public static function hitAsPrototype(RelevanceHit $hit): array
+    {
+        $entry = $hit->entry;
+        $reference = $entry->type === SearchableType::Ingredient ? ['name' => $entry->name] : ['id' => $entry->id];
+
+        return ['type' => $entry->type->value, ...$reference, 'score' => $hit->score];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function derived(): array
+    {
+        self::seed();
+
+        return self::$cache['__seed']['derived'];
     }
 
     /**

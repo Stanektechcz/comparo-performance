@@ -27,6 +27,12 @@ foreach ([
     'App\Domain\Feeds\Mapping',
     'App\Domain\Feeds\Normalisation',
     'App\Domain\Feeds\Validation',
+    'App\Domain\Search\Relevance',
+    'App\Domain\Search\Query',
+    'App\Domain\Search\Facets',
+    'App\Domain\Search\Local',
+    'App\Domain\Search\DidYouMean',
+    'App\Domain\Search\DidYouMeanSuggestion',
 ] as $pureNamespace) {
     arch("{$pureNamespace} does not touch the database, facades, the clock or randomness")
         ->expect($pureNamespace)
@@ -67,6 +73,26 @@ arch('scoring results and inputs are immutable')
         'App\Domain\Feeds\Normalisation\NormalisedFeedItem',
         'App\Domain\Feeds\Validation\FeedIssue',
         'App\Domain\Feeds\Validation\RowRejection',
+        'App\Domain\Search\Relevance\RelevanceWeights',
+        'App\Domain\Search\Relevance\SynonymTable',
+        'App\Domain\Search\Relevance\RelevanceHit',
+        'App\Domain\Search\Relevance\FuzzyScore',
+        'App\Domain\Search\Relevance\SynonymExpansion',
+        'App\Domain\Search\Relevance\PrototypeRelevance',
+        'App\Domain\Search\Query\SearchQuery',
+        'App\Domain\Search\Query\SearchFilters',
+        'App\Domain\Search\Query\NormalizedQuery',
+        'App\Domain\Search\Query\QueryNormalizer',
+        'App\Domain\Search\Facets\FacetValue',
+        'App\Domain\Search\Facets\SearchFacets',
+        'App\Domain\Search\Facets\FacetShaper',
+        'App\Domain\Search\Local\SearchableEntry',
+        'App\Domain\Search\Local\EntryAttributes',
+        'App\Domain\Search\Local\MarketAttributes',
+        'App\Domain\Search\Local\LocalSearchResult',
+        'App\Domain\Search\Local\LocalQueryEvaluator',
+        'App\Domain\Search\DidYouMean',
+        'App\Domain\Search\DidYouMeanSuggestion',
     ])
     ->toBeReadonly();
 
