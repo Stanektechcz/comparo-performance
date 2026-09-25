@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-09-25T06:00:00Z",
+  "products": [
+    {
+      "sku": "PEA-210",
+      "name": "Creatine Monohydrate Micronized 1000 g",
+      "brand": "Titan Range",
+      "ean": "85910791900",
+      "price": "27.90",
+      "currency": "EUR",
+      "availability": "available",
+      "url": "https://peaksupps.de/p/creatine-monohydrate-micronized",
+      "shipping": { "price": "3.40", "carrier": "GLS" },
+      "updated_at": "2026-09-24T18:30:00+02:00"
+    }
+  ]
+}

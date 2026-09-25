@@ -20,6 +20,9 @@ arch('scoring services do not touch the database, facades, the clock or randomne
         'App\Domain\Shared',
         'App\Domain\Shared\Text',
         'App\Domain\Matching\Engine',
+        'App\Domain\Feeds\Mapping',
+        'App\Domain\Feeds\Normalisation',
+        'App\Domain\Feeds\Validation',
     ])
     ->not->toUse([
         'App\Models',
@@ -52,6 +55,11 @@ arch('scoring results and inputs are immutable')
         'App\Domain\Matching\Engine\MatchPart',
         'App\Domain\Matching\Engine\MatchResult',
         'App\Domain\Matching\Engine\MatchingPolicy',
+        'App\Domain\Feeds\Mapping\FieldMapping',
+        'App\Domain\Feeds\Normalisation\NormalisationContext',
+        'App\Domain\Feeds\Normalisation\NormalisedFeedItem',
+        'App\Domain\Feeds\Validation\FeedIssue',
+        'App\Domain\Feeds\Validation\RowRejection',
     ])
     ->toBeReadonly();
 

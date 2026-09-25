@@ -1,0 +1,11 @@
+merchant_sku,title,brand,ean,price,old_price,currency,availability,stock,url,image_url
+PEA-186,Whey Isolate 90 Vanilla 900 g,IRONFORGE,4006381333931,40.54,54.80,EUR,in_stock,172,https://peaksupps.de/p/whey-isolate-90,https://peaksupps.de/img/whey-isolate-90.jpg
+,Whey Isolate 90 Vanilla 900 g,IRONFORGE,85910475146,40.54,,EUR,in_stock,,https://peaksupps.de/p/a,
+PEA-301,,IRONFORGE,85910475146,40.54,,EUR,in_stock,,https://peaksupps.de/p/b,
+PEA-302,Native Whey Concentrate 1000 g,IRONFORGE,85910554337,abc,,EUR,in_stock,,https://peaksupps.de/p/c,
+PEA-303,Native Whey Concentrate 1000 g,IRONFORGE,85910554337,32.90,,XYZ,in_stock,,https://peaksupps.de/p/d,
+PEA-304,Native Whey Concentrate 1000 g,IRONFORGE,85910554337,32.90,,EUR,maybe,,https://peaksupps.de/p/e,
+PEA-305,Native Whey Concentrate 1000 g,IRONFORGE,85910554337,32.90,,EUR,in_stock,,ftp://peaksupps.de/p/f,
+PEA-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX,Native Whey Concentrate 1000 g,IRONFORGE,85910554337,32.90,,EUR,in_stock,,https://peaksupps.de/p/g,
+PEA-306,Creatine Monohydrate Micronized 1000 g,Titan Range,85910791900,1.00,40.00,EUR,in_stock,,https://peaksupps.de/p/h,
+PEA-307,Creatine Monohydrate Micronized 1000 g,Titan Range,5901234123458,27.90,,EUR,in_stock,lots,https://other-shop.example/p/i,not a url

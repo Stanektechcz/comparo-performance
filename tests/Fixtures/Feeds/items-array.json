@@ -1,0 +1,30 @@
+[
+  {
+    "id": "PEA-186",
+    "title": "Whey Isolate 90 Vanilla 900 g",
+    "brand": "IRONFORGE",
+    "gtin": "85910475146",
+    "price": 40.54,
+    "old_price": "54.80",
+    "currency": "EUR",
+    "availability": "in_stock",
+    "stock": 172,
+    "link": "https://peaksupps.de/p/whey-isolate-90",
+    "image_link": "https://peaksupps.de/img/whey-isolate-90.jpg",
+    "pack_size": "900 g",
+    "variant": "Vanilla",
+    "tags": ["protein", "isolate"]
+  },
+  {
+    "id": "PEA-188",
+    "title": "Whey Isolate 90 Chocolate 1.8 kg",
+    "brand": "IRONFORGE",
+    "gtin": "85910475146",
+    "price": "74,90",
+    "currency": "EUR",
+    "availability": "preorder",
+    "link": "https://peaksupps.de/p/whey-isolate-90",
+    "pack_size": "1.8 kg",
+    "variant": "Chocolate"
+  }
+]

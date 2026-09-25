@@ -1,0 +1,5 @@
+﻿merchant_sku,product_name,brand,ean,price,currency,availability,stock,url,pack_size
+PEA-186,"Whey Isolate 90, Vanilla ""900 g""",IRONFORGE,85910475146,40.54,EUR,in_stock,172,https://peaksupps.de/p/whey-isolate-90,900 g
+PEA-190,"Native Whey Concentrate
+Unflavoured",IRONFORGE,85910554337,"1,032.90",EUR,low_stock,4,https://peaksupps.de/p/native-whey-concentrate,1000 g
+PEA-210,Creatine Monohydrate Micronized,Titan Range,85910791900,27.90,EUR,available,,https://peaksupps.de/p/creatine-monohydrate-micronized,1000 g
