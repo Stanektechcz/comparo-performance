@@ -50,3 +50,6 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | F-02 | MINOR | `AssignCorrelationId` runs before TrustProxies; behind a proxy it would record the proxy IP | Phase 18 (trusted proxy setup) |
 | F-03 | MINOR | Audit system actor component stored inside `after._actor_component` | when the audit viewer is built (Phase 8) |
 | F-04 | MINOR | tools/prototype-parity/export-fixtures.mjs is 893 lines (> 800 soft ceiling) | split per-engine exporter modules when next touched |
+| F-05 | MINOR | A product a merchant rejected can be suggested again after the listing's facts change | remember rejected (listing, product) pairs as a negative signal — Phase 8 matching ops |
+| F-06 | MINOR | Re-enabling `matching-auto-publish` does not re-link listings demoted to suggested while it was off | staff "rematch all suggested" operation (forceRematch) — Phase 8 |
+| F-07 | MINOR | `ResolveProductCandidate` applies one compliance check to source listings from several markets | per-source-market hold checks when candidates span markets — Phase 8 |
