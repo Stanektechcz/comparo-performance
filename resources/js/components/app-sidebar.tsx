@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import MatchingQueueController from '@/actions/App/Http/Controllers/Admin/Catalogue/MatchingQueueController';
 import AppLogo from '@/components/app-logo';
+import { MerchantNav } from '@/components/merchant/merchant-nav';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -77,6 +78,7 @@ export function AppSidebar() {
                             : mainNavItems
                     }
                 />
+                <MerchantNav />
             </SidebarContent>
 
             <SidebarFooter>
