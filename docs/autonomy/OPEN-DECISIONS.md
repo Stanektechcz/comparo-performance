@@ -35,3 +35,4 @@ Revisit any of them by changing configuration or writing an ADR.
 | A-25 | 2026-09-25 | Coupons and articles are not searchable in Phase 3 (prototype coupon hits include expired / other-market coupons; articles arrive with Content in Phase 11) | additive later | Head of Product |
 | A-26 | 2026-09-25 | The parity scorer keeps the prototype's substring synonym expansion (e.g. "pumpkin" → pre-workout group) because it is the spec for the local engine; Meilisearch uses token synonyms | documented deviation between engines | Head of Data |
 | A-27 | 2026-09-25 | `parseNL` intent labels and the Ask feature are deferred (the prototype's country-code matching has false positives such as "it"/"at") | no UI claims | Head of Product |
+| A-28 | 2026-09-25 | Shop (merchant) results in a market include only merchants with an active shipping zone for that market; did-you-mean runs on the visible entries when the final result count is zero | configurable later | Head of Product |
