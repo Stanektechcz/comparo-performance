@@ -53,3 +53,6 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | F-05 | MINOR | A product a merchant rejected can be suggested again after the listing's facts change | remember rejected (listing, product) pairs as a negative signal — Phase 8 matching ops |
 | F-06 | MINOR | Re-enabling `matching-auto-publish` does not re-link listings demoted to suggested while it was off | staff "rematch all suggested" operation (forceRematch) — Phase 8 |
 | F-07 | MINOR | `ResolveProductCandidate` applies one compliance check to source listings from several markets | per-source-market hold checks when candidates span markets — Phase 8 |
+| F-08 | MINOR | Rows rejected during matching for `SKU_OWNED_BY_OTHER_SOURCE` are counted after the reject-threshold check | include them in the threshold when the pipeline is next touched |
+| F-09 | MINOR | `merchant_products.missing_run_count` is a tinyint without an overflow guard (derived count) | clamp at the column maximum |
+| F-10 | MINOR | The staff sidebar entry "Catalogue matching" is shown to any staff member; staff without `matching.review` get a 403 | share fine-grained staff capability flags in HandleInertiaRequests (Phase 8 staff console) |
