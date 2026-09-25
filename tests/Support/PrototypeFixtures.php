@@ -3,6 +3,14 @@
 namespace Tests\Support;
 
 use App\Domain\Catalog\Completeness\ProductFacts;
+use App\Domain\Matching\Engine\BrandAliasSet;
+use App\Domain\Matching\Engine\CandidateProduct;
+use App\Domain\Matching\Engine\FeedItemFacts;
+use App\Domain\Matching\Engine\MatchingPolicy;
+use App\Domain\Matching\Engine\MatchPart;
+use App\Domain\Matching\Engine\MatchPartLabel;
+use App\Domain\Matching\Engine\MatchResult;
+use App\Domain\Matching\Engine\ProductMatcher;
 use App\Domain\Merchants\Risk\RiskInput;
 use App\Domain\Merchants\Risk\RiskLevel;
 use App\Domain\Merchants\Trust\TrustSignals;
@@ -13,6 +21,7 @@ use App\Domain\Pricing\LandedPrice\LandedPriceInput;
 use App\Domain\Pricing\LandedPrice\ShippingTerms;
 use DateTimeImmutable;
 use DateTimeZone;
+use UnexpectedValueException;
 
 /**
  * Access to the golden fixtures exported from the prototype by
@@ -211,6 +220,155 @@ final class PrototypeFixtures
     public static function dailyLows(array $product): array
     {
         return array_map(self::minor(...), $product['hist']['min']);
+    }
+
+    /**
+     * The seed catalogue as matching candidates, in seed order (the prototype
+     * scores `S.products` in array order), or only the given products in the
+     * given order.
+     *
+     * @param  ?list<int>  $productIds
+     * @return list<CandidateProduct>
+     */
+    public static function candidateProducts(?array $productIds = null): array
+    {
+        $products = $productIds === null
+            ? self::seed()['products']
+            : array_map(static fn (int $id): array => self::indexed('products')[$id], $productIds);
+
+        return array_values(array_map(self::candidateProduct(...), $products));
+    }
+
+    /**
+     * @param  array<string, mixed>  $product
+     */
+    public static function candidateProduct(array $product): CandidateProduct
+    {
+        $brand = self::indexed('brands')[$product['brandId'] ?? 0] ?? [];
+
+        return new CandidateProduct(
+            productId: (int) $product['id'],
+            name: self::string($product['name']),
+            packLabel: self::string($product['pack']),
+            brandName: self::string($brand['name'] ?? ''),
+            ean: self::optionalString($product['ean'] ?? null),
+            alternatePacks: array_map(self::string(...), $product['packs'] ?? []),
+            variants: array_map(self::string(...), $product['variants'] ?? []),
+            listedIngredients: array_map(self::string(...), $product['ingredients'] ?? []),
+        );
+    }
+
+    /**
+     * `S.ix.brandAliases`, in seed order.
+     *
+     * @return list<BrandAliasSet>
+     */
+    public static function brandAliasSets(): array
+    {
+        return array_map(static fn (array $set): BrandAliasSet => new BrandAliasSet(
+            canonicalBrandName: self::string($set['canonical']),
+            aliases: array_map(self::string(...), $set['aliases']),
+        ), self::seed()['ix']['brandAliases'] ?? []);
+    }
+
+    /**
+     * A prototype feed row (`S.feedItems` or a synthetic fixture item).
+     *
+     * @param  array<string, mixed>  $item
+     */
+    public static function feedItemFacts(array $item): FeedItemFacts
+    {
+        return new FeedItemFacts(
+            rawTitle: self::string($item['raw'] ?? ''),
+            ean: self::optionalString($item['ean'] ?? null),
+            brandRaw: self::optionalString($item['brandRaw'] ?? null),
+            packRaw: self::optionalString($item['packRaw'] ?? null),
+            variantRaw: self::optionalString($item['variantRaw'] ?? null),
+        );
+    }
+
+    /**
+     * Runs the matching fixture cases through the engine under `$policy`.
+     * `items` and `synthetic` are full matches (whole seed catalogue unless the
+     * case lists its own products); `candidates` score one product in isolation.
+     *
+     * @param  list<string>  $sections
+     * @return array<string, array{expected: array<string, mixed>, actual: array<string, mixed>}>
+     */
+    public static function matchingCases(MatchingPolicy $policy, array $sections = ['items', 'candidates', 'synthetic']): array
+    {
+        $fixture = self::load('matching');
+        $matcher = new ProductMatcher;
+        $aliases = self::brandAliasSets();
+        $catalogue = self::candidateProducts();
+        $candidates = array_column(array_map(static fn (CandidateProduct $c): array => ['id' => $c->productId, 'c' => $c], $catalogue), 'c', 'id');
+        $feedItems = self::indexed('feedItems');
+        $cases = [];
+
+        foreach ($sections as $section) {
+            foreach ($fixture[$section] as $case) {
+                [$key, $result] = match ($section) {
+                    'items' => [
+                        "item {$case['feedItemId']}",
+                        $matcher->match(self::feedItemFacts($feedItems[$case['feedItemId']]), $catalogue, $aliases, $policy),
+                    ],
+                    'candidates' => [
+                        "item {$case['feedItemId']} × product {$case['productId']}",
+                        $matcher->scoreCandidate(self::feedItemFacts($feedItems[$case['feedItemId']]), $candidates[$case['productId']], $aliases, $policy),
+                    ],
+                    'synthetic' => [
+                        "{$case['item']['id']} {$case['name']}",
+                        $matcher->match(
+                            self::feedItemFacts($case['item']),
+                            $case['products'] === null ? $catalogue : self::candidateProducts($case['products']),
+                            $aliases,
+                            $policy,
+                        ),
+                    ],
+                    default => throw new UnexpectedValueException("Unknown matching section [{$section}]."),
+                };
+
+                $expected = $case['match'];
+                $expected['rawPoints'] = array_sum(array_column($expected['parts'], 'pts'));
+                $cases["{$section}: {$key}"] = ['expected' => $expected, 'actual' => self::matchResultAsPrototype($result)];
+            }
+        }
+
+        return $cases;
+    }
+
+    /**
+     * A MatchResult in the prototype's `ix.match()` shape (colour omitted).
+     *
+     * @return array{score: int, level: string, bucket: string, product: ?int, parts: list<array{label: string, pts: int}>, rawPoints: int}
+     */
+    public static function matchResultAsPrototype(MatchResult $result): array
+    {
+        return [
+            'score' => $result->score,
+            'level' => $result->level->label(),
+            'bucket' => $result->bucket->value,
+            'product' => $result->bestProductId,
+            'parts' => array_map(static fn (MatchPart $part): array => ['label' => MatchPartLabel::english($part), 'pts' => $part->points], $result->parts),
+            'rawPoints' => $result->rawPoints,
+        ];
+    }
+
+    /**
+     * Seed text fields are strings; anything else would change the JS semantics.
+     */
+    private static function string(mixed $value): string
+    {
+        if (! is_string($value)) {
+            throw new UnexpectedValueException('Expected a string in the prototype seed, got '.get_debug_type($value).'.');
+        }
+
+        return $value;
+    }
+
+    private static function optionalString(mixed $value): ?string
+    {
+        return $value === null ? null : self::string($value);
     }
 
     private static function float(mixed $value): ?float

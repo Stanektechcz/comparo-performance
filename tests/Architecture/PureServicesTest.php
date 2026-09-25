@@ -18,6 +18,8 @@ arch('scoring services do not touch the database, facades, the clock or randomne
         'App\Domain\Compliance\ComplianceStatus',
         'App\Domain\Compliance\ComplianceDecision',
         'App\Domain\Shared',
+        'App\Domain\Shared\Text',
+        'App\Domain\Matching\Engine',
     ])
     ->not->toUse([
         'App\Models',
@@ -44,8 +46,39 @@ arch('scoring results and inputs are immutable')
         'App\Domain\Merchants\Trust\TrustSignals',
         'App\Domain\Merchants\Trust\TrustScore',
         'App\Domain\Shared\Money',
+        'App\Domain\Matching\Engine\FeedItemFacts',
+        'App\Domain\Matching\Engine\CandidateProduct',
+        'App\Domain\Matching\Engine\BrandAliasSet',
+        'App\Domain\Matching\Engine\MatchPart',
+        'App\Domain\Matching\Engine\MatchResult',
+        'App\Domain\Matching\Engine\MatchingPolicy',
     ])
     ->toBeReadonly();
+
+/**
+ * Matching\Engine may depend on nothing but the shared kernel
+ * (docs/architecture/phase-2-feeds-matching.md §1): no feed, catalogue,
+ * offer, commercial or persistence code can influence a match.
+ */
+arch('the matching engine depends only on the shared kernel')
+    ->expect('App\Domain\Matching\Engine')
+    ->not->toUse([
+        'App\Models',
+        'App\Http',
+        'App\Domain\Accounts',
+        'App\Domain\Catalog',
+        'App\Domain\Commercial',
+        'App\Domain\Affiliate',
+        'App\Domain\Compliance',
+        'App\Domain\Feeds',
+        'App\Domain\Merchants',
+        'App\Domain\Offers',
+        'App\Domain\Platform',
+        'App\Domain\Pricing',
+        'App\Domain\Matching\Actions',
+        'App\Domain\Matching\Queries',
+        'Illuminate',
+    ]);
 
 arch('no debugging helpers ship')
     ->expect('App')
