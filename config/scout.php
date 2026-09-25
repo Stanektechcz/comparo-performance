@@ -139,6 +139,9 @@ return [
     'meilisearch' => [
         'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
         'key' => env('MEILISEARCH_KEY'),
+        // Comparo search engine (App\Domain\Search): how long index writes,
+        // settings and swaps wait for their Meilisearch task.
+        'task_timeout_ms' => (int) env('MEILISEARCH_TASK_TIMEOUT_MS', 30000),
         'index-settings' => [
             // 'users' => [
             //     'filterableAttributes' => ['id', 'name', 'email'],
