@@ -536,14 +536,20 @@ function matchingPolicy() {
         weights: {
             ean_exact: signal('EAN exact match', 'EAN weight'),
             brand_exact: signal("Brand exact' \\+ \\(", 'brand weight'),
-            brand_in_title: signal('Brand found in title', 'brand-in-title weight'),
+            brand_in_title: signal(
+                'Brand found in title',
+                'brand-in-title weight',
+            ),
             title_similarity_scale: readInts(
                 body,
                 'const simPts = Math\\.round\\(sim \\* (\\d+)\\);',
                 'title similarity scale',
             )[0],
             pack_exact: signal('Package size match', 'pack weight'),
-            pack_alternate: signal('Known alternate pack', 'alternate pack weight'),
+            pack_alternate: signal(
+                'Known alternate pack',
+                'alternate pack weight',
+            ),
             pack_differs: differsShown,
             variant: signal('Variant match', 'variant weight'),
             ingredient: signal('Ingredient set overlap', 'ingredient weight'),
@@ -602,7 +608,9 @@ function exportMatchingCandidates({ seed, context }) {
             cases.push({
                 feedItemId: item.id,
                 productId: product.id,
-                match: clean(freshEngine(context, seed, [product.id]).match(item)),
+                match: clean(
+                    freshEngine(context, seed, [product.id]).match(item),
+                ),
             });
         }
     }
@@ -633,7 +641,10 @@ const SIMILARITY_PAIRS = [
     ['---', '***'],
     ['B-12 / D3+K2 (90 caps)', 'b 12 d3 k2 90 caps'],
     ['Omega-3 Ultra 120 caps BioPeak', 'Omega 3 ULTRA 240 caps double pack'],
-    ['WHEY ISOLATE 90 - Vanilla 900g | IRONFORGE', 'Whey Isolate 90 900 g IRONFORGE'],
+    [
+        'WHEY ISOLATE 90 - Vanilla 900g | IRONFORGE',
+        'Whey Isolate 90 900 g IRONFORGE',
+    ],
     ['a b c d e f', 'a b c d e f'],
     ['protein', 'protein protein'],
 ];
@@ -686,39 +697,193 @@ function exportMatchingSynthetic({ seed, context }) {
     const whey = product(6);
     const alpha = product(1);
     const cases = [
-        ['brand alias with a space', { raw: 'Iron Forge whey isolate 90 900 g vanilla', brandRaw: 'Iron Forge', packRaw: '900 g', variantRaw: 'Vanilla' }],
-        ['brand alias with a hyphen', { raw: 'IRON-FORGE WHEY ISOLATE 90', brandRaw: 'IRON-FORGE', ean: whey.ean }],
-        ['brand alias for Peak Labs', { raw: 'PeakLabs EAA complete 450 g', brandRaw: 'PeakLabs', packRaw: '450 g' }],
-        ['brand alias for Vytal Labs', { raw: 'VytalLabs recovery matrix 600 g', brandRaw: 'VytalLabs', packRaw: '600 g' }],
-        ['brand alias for NORDKRAFT', { raw: 'Nord Kraft mass formula x chocolate', brandRaw: 'Nord Kraft', variantRaw: 'Chocolate' }],
-        ['brand differs only in case',{ raw: 'ironforge whey isolate 90', brandRaw: 'ironforge' }],
-        ['brand differs only in diacritics', { raw: 'Nördkraft mass formula x 4000 g', brandRaw: 'Nördkraft', packRaw: '4000 g' }],
-        ['brand with surrounding spaces', { raw: 'IRONFORGE whey isolate 90', brandRaw: ' IRONFORGE ' }],
-        ['brand only in the title', { raw: 'BioPeak vitamin d3 k2 90 caps', brandRaw: 'Some Distributor' }],
-        ['brand in the title but no brandRaw', { raw: 'BioPeak vitamin d3 k2 90 caps' }],
-        ['brandRaw "0" is truthy', { raw: 'IRONFORGE whey isolate 90 900 g', brandRaw: '0' }],
-        ['known alternate pack', { raw: 'Performance Alpha pre workout 720 g', ean: alpha.ean, packRaw: '720 g' }],
-        ['pack differs only in case', { raw: 'Whey isolate 90', ean: whey.ean, packRaw: '900 G' }],
-        ['pack mismatch clamps every product to 0', { raw: 'qq', packRaw: '999 kg' }],
+        [
+            'brand alias with a space',
+            {
+                raw: 'Iron Forge whey isolate 90 900 g vanilla',
+                brandRaw: 'Iron Forge',
+                packRaw: '900 g',
+                variantRaw: 'Vanilla',
+            },
+        ],
+        [
+            'brand alias with a hyphen',
+            {
+                raw: 'IRON-FORGE WHEY ISOLATE 90',
+                brandRaw: 'IRON-FORGE',
+                ean: whey.ean,
+            },
+        ],
+        [
+            'brand alias for Peak Labs',
+            {
+                raw: 'PeakLabs EAA complete 450 g',
+                brandRaw: 'PeakLabs',
+                packRaw: '450 g',
+            },
+        ],
+        [
+            'brand alias for Vytal Labs',
+            {
+                raw: 'VytalLabs recovery matrix 600 g',
+                brandRaw: 'VytalLabs',
+                packRaw: '600 g',
+            },
+        ],
+        [
+            'brand alias for NORDKRAFT',
+            {
+                raw: 'Nord Kraft mass formula x chocolate',
+                brandRaw: 'Nord Kraft',
+                variantRaw: 'Chocolate',
+            },
+        ],
+        [
+            'brand differs only in case',
+            { raw: 'ironforge whey isolate 90', brandRaw: 'ironforge' },
+        ],
+        [
+            'brand differs only in diacritics',
+            {
+                raw: 'Nördkraft mass formula x 4000 g',
+                brandRaw: 'Nördkraft',
+                packRaw: '4000 g',
+            },
+        ],
+        [
+            'brand with surrounding spaces',
+            { raw: 'IRONFORGE whey isolate 90', brandRaw: ' IRONFORGE ' },
+        ],
+        [
+            'brand only in the title',
+            {
+                raw: 'BioPeak vitamin d3 k2 90 caps',
+                brandRaw: 'Some Distributor',
+            },
+        ],
+        [
+            'brand in the title but no brandRaw',
+            { raw: 'BioPeak vitamin d3 k2 90 caps' },
+        ],
+        [
+            'brandRaw "0" is truthy',
+            { raw: 'IRONFORGE whey isolate 90 900 g', brandRaw: '0' },
+        ],
+        [
+            'known alternate pack',
+            {
+                raw: 'Performance Alpha pre workout 720 g',
+                ean: alpha.ean,
+                packRaw: '720 g',
+            },
+        ],
+        [
+            'pack differs only in case',
+            { raw: 'Whey isolate 90', ean: whey.ean, packRaw: '900 G' },
+        ],
+        [
+            'pack mismatch clamps every product to 0',
+            { raw: 'qq', packRaw: '999 kg' },
+        ],
         ['packRaw "0" is truthy', { raw: 'qq', packRaw: '0' }],
         ['variantRaw "0" is truthy', { raw: 'qq', variantRaw: '0' }],
         ['variant only', { raw: 'qq', variantRaw: 'salted CARAMEL' }],
         ['empty raw title with EAN', { raw: '', ean: whey.ean }],
         ['missing raw title', { ean: whey.ean }],
-        ['EAN with a trailing space', { raw: 'Whey isolate 90 900 g', ean: `${whey.ean} ` }],
+        [
+            'EAN with a trailing space',
+            { raw: 'Whey isolate 90 900 g', ean: `${whey.ean} ` },
+        ],
         ['ingredient first word in title', { raw: 'qq caffeine qq' }],
-        ['diacritics in the title', { raw: 'Créatine monohydraté 500 g Creapure', brandRaw: 'IRONFORGE', packRaw: '500 g' }],
-        ['score above 100 clamps to 100', { raw: 'IRONFORGE Whey Isolate 90 900 g Vanilla whey', ean: whey.ean, brandRaw: 'IRONFORGE', packRaw: '900 g', variantRaw: 'Vanilla' }],
-        ['tie on brand keeps the first product', { raw: 'qq', brandRaw: 'IRONFORGE' }],
-        ['tie between identical scores in a two-product catalogue', { raw: 'qq', brandRaw: 'IRONFORGE' }, [whey.id, 2]],
-        ['reversed two-product catalogue', { raw: 'qq', brandRaw: 'IRONFORGE' }, [2, whey.id]],
-        ['empty catalogue', { raw: 'IRONFORGE Whey Isolate 90', ean: whey.ean, brandRaw: 'IRONFORGE' }, []],
+        [
+            'diacritics in the title',
+            {
+                raw: 'Créatine monohydraté 500 g Creapure',
+                brandRaw: 'IRONFORGE',
+                packRaw: '500 g',
+            },
+        ],
+        [
+            'score above 100 clamps to 100',
+            {
+                raw: 'IRONFORGE Whey Isolate 90 900 g Vanilla whey',
+                ean: whey.ean,
+                brandRaw: 'IRONFORGE',
+                packRaw: '900 g',
+                variantRaw: 'Vanilla',
+            },
+        ],
+        [
+            'tie on brand keeps the first product',
+            { raw: 'qq', brandRaw: 'IRONFORGE' },
+        ],
+        [
+            'tie between identical scores in a two-product catalogue',
+            { raw: 'qq', brandRaw: 'IRONFORGE' },
+            [whey.id, 2],
+        ],
+        [
+            'reversed two-product catalogue',
+            { raw: 'qq', brandRaw: 'IRONFORGE' },
+            [2, whey.id],
+        ],
+        [
+            'empty catalogue',
+            {
+                raw: 'IRONFORGE Whey Isolate 90',
+                ean: whey.ean,
+                brandRaw: 'IRONFORGE',
+            },
+            [],
+        ],
         ['nothing in common', { raw: 'zz' }],
-        ['boundary score 64', { raw: 'Whey 90', ean: whey.ean, brandRaw: 'IRONFORGE', packRaw: '2000 g' }],
-        ['boundary score 79', { raw: 'Isolate 900 g', ean: whey.ean, packRaw: '900 g', variantRaw: 'Vanilla' }],
-        ['boundary score 80', { raw: 'Isolate 90', ean: whey.ean, brandRaw: 'IRONFORGE', variantRaw: 'Vanilla' }],
-        ['boundary score 89', { raw: '90 900 g', ean: whey.ean, brandRaw: 'IRONFORGE', packRaw: '900 g', variantRaw: 'Vanilla' }],
-        ['boundary score 90', { raw: 'Isolate 90', ean: whey.ean, brandRaw: 'IRONFORGE', packRaw: '900 g', variantRaw: 'Vanilla' }],
+        [
+            'boundary score 64',
+            {
+                raw: 'Whey 90',
+                ean: whey.ean,
+                brandRaw: 'IRONFORGE',
+                packRaw: '2000 g',
+            },
+        ],
+        [
+            'boundary score 79',
+            {
+                raw: 'Isolate 900 g',
+                ean: whey.ean,
+                packRaw: '900 g',
+                variantRaw: 'Vanilla',
+            },
+        ],
+        [
+            'boundary score 80',
+            {
+                raw: 'Isolate 90',
+                ean: whey.ean,
+                brandRaw: 'IRONFORGE',
+                variantRaw: 'Vanilla',
+            },
+        ],
+        [
+            'boundary score 89',
+            {
+                raw: '90 900 g',
+                ean: whey.ean,
+                brandRaw: 'IRONFORGE',
+                packRaw: '900 g',
+                variantRaw: 'Vanilla',
+            },
+        ],
+        [
+            'boundary score 90',
+            {
+                raw: 'Isolate 90',
+                ean: whey.ean,
+                brandRaw: 'IRONFORGE',
+                packRaw: '900 g',
+                variantRaw: 'Vanilla',
+            },
+        ],
     ];
 
     return cases.map(([name, fields, productIds = null], index) => {
@@ -764,7 +929,7 @@ const ANOMALY_KINDS = {
 function anomalyMeta(meta) {
     return {
         ...meta,
-        note: 'intel.js anomalies(): upper median of the product\'s positive prices (the offer included); zero, < 45 % or > 220 % of it is flagged.',
+        note: "intel.js anomalies(): upper median of the product's positive prices (the offer included); zero, < 45 % or > 220 % of it is flagged.",
     };
 }
 
@@ -802,7 +967,10 @@ const ANOMALY_SYNTHETIC = [
     ['a lone priced offer', [50]],
     ['a lone zero price has no median', [0]],
     ['zero prices against one priced offer', [0, 0, 30]],
-    ['odd count, cheap outlier on a tight market', [12.99, 29.9, 31.5, 33, 34.95]],
+    [
+        'odd count, cheap outlier on a tight market',
+        [12.99, 29.9, 31.5, 33, 34.95],
+    ],
 ];
 
 function exportAnomalies({ seed, context }) {
