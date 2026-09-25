@@ -4,6 +4,7 @@ namespace App\Domain\Platform\PrototypeImport;
 
 use App\Domain\Catalog\ProductStatus;
 use App\Domain\Compliance\ComplianceStatus;
+use App\Domain\Matching\ListingMatchStatus;
 use App\Domain\Merchants\MerchantStatus;
 use App\Domain\Offers\LinkStatus;
 use App\Domain\Pricing\CouponState;
@@ -216,6 +217,7 @@ final class PrototypeSnapshotImporter
         $this->resetSequences(['brands', 'categories', 'products']);
         $this->importVariants($now);
         $this->importDoses();
+        (new BrandAliasImport($this->snapshot, $this->report))->run($now);
     }
 
     /**
@@ -320,6 +322,10 @@ final class PrototypeSnapshotImporter
                 'url' => $offer['url'] ?? null,
                 'first_seen_at' => $this->time->db($product['created'] ?? $offer['updated'] ?? null),
                 'last_seen_at' => $this->time->db($offer['updated'] ?? null),
+                // Every prototype offer is already linked to its product; no feed pipeline ran.
+                'match_status' => ListingMatchStatus::Auto->value,
+                'match_score' => null,
+                'matched_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -520,6 +526,11 @@ final class PrototypeSnapshotImporter
     /**
      * Label doses first (in label order), then undisclosed ingredients with a null amount.
      */
+    /**
+     * `is_listed` marks the product's declared ingredients (`p.ingredients`,
+     * what the matcher reads) as distinct from ingredients that only appear
+     * in the label dose data.
+     */
     private function importDoses(): void
     {
         $ingredientIds = DB::table('ingredients')->pluck('id', 'name')->all();
@@ -527,6 +538,7 @@ final class PrototypeSnapshotImporter
 
         foreach ($this->snapshot->records('products') as $product) {
             $productId = (int) $product['id'];
+            $listed = array_map(strval(...), (array) ($product['ingredients'] ?? []));
             $position = 0;
             $linked = [];
 
@@ -541,10 +553,11 @@ final class PrototypeSnapshotImporter
                     'is_carrier' => (bool) ($dose['carrier'] ?? false),
                     'nrv_percent' => $dose['nrv'] ?? null,
                     'position' => $position++,
+                    'is_listed' => in_array($name, $listed, true),
                 ];
             }
 
-            foreach ((array) ($product['ingredients'] ?? []) as $name) {
+            foreach ($listed as $name) {
                 if (isset($linked[$name])) {
                     continue;
                 }
@@ -552,11 +565,12 @@ final class PrototypeSnapshotImporter
                 $linked[$name] = true;
                 $rows[] = [
                     'product_id' => $productId,
-                    'ingredient_id' => $ingredientIds[$name] ?? throw PrototypeImportException::missingReference('ingredient', (string) $name),
+                    'ingredient_id' => $ingredientIds[$name] ?? throw PrototypeImportException::missingReference('ingredient', $name),
                     'amount_mg' => null,
                     'is_carrier' => false,
                     'nrv_percent' => null,
                     'position' => $position++,
+                    'is_listed' => true,
                 ];
             }
         }
@@ -649,6 +663,7 @@ final class PrototypeSnapshotImporter
             'anomaly_reference_minor' => empty($ix['marketMedian']) ? null : self::minor($ix['marketMedian']),
             'link_status' => $linkStatus->value,
             'is_active' => true,
+            'source' => self::SOURCE,
             'source_updated_at' => $this->time->db($offer['updated'] ?? null) ?? $now,
             'created_at' => $now,
             'updated_at' => $now,

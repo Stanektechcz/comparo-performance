@@ -1,16 +1,20 @@
 <?php
 
 use App\Domain\Accounts\Authorization\StaffRole;
+use App\Domain\Catalog\BrandAliasStatus;
 use App\Domain\Compliance\ComplianceStatus;
+use App\Domain\Matching\ListingMatchStatus;
 use App\Domain\Merchants\MerchantStatus;
 use App\Domain\Offers\LinkStatus;
 use App\Domain\Offers\Ranking\RankingWeights;
 use App\Domain\Platform\PrototypeImport\DemoDataRefused;
 use App\Domain\Platform\PrototypeImport\PrototypeSnapshotImporter;
 use App\Domain\Pricing\CouponType;
+use App\Domain\Pricing\History\SnapshotSource;
 use App\Domain\Pricing\PriceAnomaly;
 use App\Models\Coupon;
 use App\Models\Merchant;
+use App\Models\MerchantProduct;
 use App\Models\Offer;
 use App\Models\Product;
 use App\Models\RankingVersion;
@@ -110,6 +114,27 @@ it('imports the prototype snapshot with the documented counts and values', funct
 
     // The last market-stat day is the anchor day.
     expect(DB::table('market_price_stats')->max('stat_date'))->toBe('2026-09-06');
+
+    // Brand aliases: 4 of the 5 seed sets resolve to a seeded brand ("Peak
+    // Labs" doesn't exist), each alias kept, seed status and prototype_demo source.
+    expect(DB::table('brand_aliases')->count())->toBe(9)
+        ->and(DB::table('brand_aliases')->where('source', PrototypeSnapshotImporter::SOURCE)->count())->toBe(9)
+        ->and(DB::table('brand_aliases')->where('status', BrandAliasStatus::Approved->value)->count())->toBe(7)
+        ->and(DB::table('brand_aliases')->where('status', BrandAliasStatus::Suggested->value)->count())->toBe(2);
+
+    // Listed ingredients (matcher input, prototype `p.ingredients`) are flagged
+    // distinctly from dose-only rows; in this seed every dose ingredient is
+    // also listed, so all rows are is_listed = true.
+    expect(DB::table('ingredient_product')->where('is_listed', true)->count())->toBe(DB::table('ingredient_product')->count())
+        ->and(DB::table('ingredient_product')->where('is_listed', false)->count())->toBe(0);
+
+    // Every demo listing is already linked (no feed pipeline ran for it).
+    expect(MerchantProduct::query()->where('match_status', ListingMatchStatus::Auto)->count())->toBe(267)
+        ->and(MerchantProduct::query()->whereNotNull('match_score')->count())->toBe(0)
+        ->and(MerchantProduct::query()->whereNull('matched_at')->count())->toBe(0);
+
+    // Demo offers are tagged distinctly from real feed-published offers.
+    expect(Offer::query()->where('source', SnapshotSource::PrototypeDemo->value)->count())->toBe(267);
 });
 
 it('leaves ranking configuration and commercial data untouched', function () {
@@ -135,8 +160,12 @@ it('is idempotent when run twice with the same anchor', function () {
     $first = demoSeedingTableCounts();
     $importer->run();
 
+    // The only expected report finding is the "Peak Labs" alias set, whose
+    // canonical brand isn't seeded; it is noted (not silently dropped) on
+    // every run, so the category grows by one note per run, not per row.
     expect(demoSeedingTableCounts())->toBe($first)
-        ->and($importer->report()->isClean())->toBeTrue();
+        ->and($importer->report()->count('Brand alias set with unknown canonical brand (skipped)'))->toBe(2)
+        ->and($importer->report()->summary())->toHaveCount(1);
 });
 
 it('shifts every prototype timestamp by anchor minus seed.NOW', function () {
