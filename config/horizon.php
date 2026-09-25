@@ -98,6 +98,7 @@ return [
 
     'waits' => [
         'redis:default' => 60,
+        'redis:search' => 120,
     ],
 
     /*
@@ -255,6 +256,37 @@ return [
             'timeout' => 300,
             'nice' => 0,
         ],
+
+        // Phase 3 search (docs/architecture/phase-3-search.md §5, §6). Both run on
+        // the default redis connection: each 60 s timeout stays below its
+        // retry_after (90 s, config/queue.php) so a running job is never re-delivered.
+        'supervisor-search' => [
+            'connection' => 'redis',
+            'queue' => ['search'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
+            'nice' => 0,
+        ],
+
+        'supervisor-analytics' => [
+            'connection' => 'redis',
+            'queue' => ['analytics'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 60,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -279,6 +311,18 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            // One outbox processor runs at a time (the job's overlap lock); a second
+            // process serves the full-reindex job and priority dispatches.
+            'supervisor-search' => [
+                'maxProcesses' => 2,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+            'supervisor-analytics' => [
+                'maxProcesses' => 2,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
         ],
 
         'local' => [
@@ -292,6 +336,12 @@ return [
                 'maxProcesses' => 1,
             ],
             'supervisor-pricing' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-search' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-analytics' => [
                 'maxProcesses' => 1,
             ],
         ],

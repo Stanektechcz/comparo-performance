@@ -104,6 +104,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Search (docs/architecture/phase-3-search.md §5)
+    |--------------------------------------------------------------------------
+    |
+    | Indexing runs through the search_index_outbox: after-commit listeners
+    | upsert rows, App\Domain\Search\Jobs\ProcessSearchOutbox (queue `search`,
+    | timeout 60 s < the default connection's retry_after 90 s) drains them.
+    |
+    */
+
+    'search' => [
+        'indexing' => [
+            'queue' => 'search',
+            // Outbox rows taken per ProcessSearchOutbox run (one bulk write per entity type).
+            'batch' => 200,
+            // Ids read and outbox rows written per statement when a merchant, brand,
+            // category, ingredient or market change fans out to many products.
+            'fan_out_chunk' => 500,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Demo data
     |--------------------------------------------------------------------------
     |
