@@ -4,10 +4,13 @@
     "current_slice": "search-and-discovery",
     "branch": "phase-3/search",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "Phase 2 Gate C + merge into main",
-    "next_task": "P3-01 Phase 3 read-only analyses -> docs/architecture/phase-3-search.md + TASK-GRAPH Phase 3",
+    "last_completed_task": "P3-01 Phase 3 design (docs/architecture/phase-3-search.md) + decisions A-20..A-27 + task graph",
+    "next_task": "Integrate P3-02 (search parity + pure core) and P3-03 (schema + currency fix), then P3-04 engine/documents",
     "blocked_tasks": [],
-    "active_agents": [],
+    "active_agents": [
+        "P3-02 search-engineer (task-deep)",
+        "P3-03 database/pricing (task-deep)"
+    ],
     "last_full_test_result": {
         "date": "2026-09-25",
         "driver": "sqlite + pgsql 18 (embedded)",
