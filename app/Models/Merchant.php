@@ -129,6 +129,14 @@ class Merchant extends Model
     }
 
     /**
+     * @return HasMany<FeedSource, $this>
+     */
+    public function feedSources(): HasMany
+    {
+        return $this->hasMany(FeedSource::class);
+    }
+
+    /**
      * @return BelongsToMany<User, $this>
      */
     public function members(): BelongsToMany

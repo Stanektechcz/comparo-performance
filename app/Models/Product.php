@@ -122,8 +122,26 @@ class Product extends Model
     {
         return $this->belongsToMany(Ingredient::class)
             ->using(IngredientProduct::class)
-            ->withPivot(['amount_mg', 'is_carrier', 'nrv_percent', 'position'])
+            ->withPivot(['amount_mg', 'is_carrier', 'nrv_percent', 'position', 'is_listed'])
             ->orderByPivot('position');
+    }
+
+    /**
+     * Merchant listings linked to this product.
+     *
+     * @return HasMany<MerchantProduct, $this>
+     */
+    public function merchantProducts(): HasMany
+    {
+        return $this->hasMany(MerchantProduct::class);
+    }
+
+    /**
+     * @return HasMany<MatchingConflict, $this>
+     */
+    public function matchingConflicts(): HasMany
+    {
+        return $this->hasMany(MatchingConflict::class);
     }
 
     /**

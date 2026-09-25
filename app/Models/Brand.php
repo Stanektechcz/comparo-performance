@@ -32,4 +32,12 @@ class Brand extends Model
     {
         return $this->hasMany(Product::class);
     }
+
+    /**
+     * @return HasMany<BrandAlias, $this>
+     */
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(BrandAlias::class);
+    }
 }

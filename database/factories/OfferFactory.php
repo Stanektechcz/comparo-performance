@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Domain\Offers\Availability;
 use App\Domain\Offers\LinkStatus;
+use App\Domain\Offers\OfferDeactivationReason;
 use App\Domain\Pricing\PriceAnomaly;
 use App\Models\Merchant;
 use App\Models\MerchantProduct;
@@ -54,6 +55,7 @@ class OfferFactory extends Factory
             'link_status' => LinkStatus::Ok,
             'is_active' => true,
             'source_updated_at' => now()->subHours(2),
+            'source' => 'feed',
         ];
     }
 
@@ -122,5 +124,17 @@ class OfferFactory extends Factory
     public function inactive(): static
     {
         return $this->state(fn (array $attributes): array => ['is_active' => false]);
+    }
+
+    /**
+     * Deactivated by reconciliation or an explicit action (never deleted).
+     */
+    public function deactivated(OfferDeactivationReason $reason = OfferDeactivationReason::MissingFromFeed): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => false,
+            'deactivated_at' => now()->subHour(),
+            'deactivation_reason' => $reason,
+        ]);
     }
 }

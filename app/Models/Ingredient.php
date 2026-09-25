@@ -24,6 +24,6 @@ class Ingredient extends Model
     {
         return $this->belongsToMany(Product::class)
             ->using(IngredientProduct::class)
-            ->withPivot(['amount_mg', 'is_carrier', 'nrv_percent', 'position']);
+            ->withPivot(['amount_mg', 'is_carrier', 'nrv_percent', 'position', 'is_listed']);
     }
 }

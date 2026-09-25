@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * @property bool $is_carrier
  * @property string|null $nrv_percent
  * @property int $position
+ * @property bool $is_listed listed on the label (prototype `p.ingredients`) vs dose-only; the matcher uses listed ones
  */
 final class IngredientProduct extends Pivot
 {
@@ -27,6 +28,7 @@ final class IngredientProduct extends Pivot
             'is_carrier' => 'boolean',
             'nrv_percent' => 'decimal:2',
             'position' => 'integer',
+            'is_listed' => 'boolean',
         ];
     }
 }

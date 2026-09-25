@@ -4,6 +4,7 @@ use App\Domain\Platform\Exceptions\AppendOnlyViolation;
 use App\Domain\Pricing\History\SnapshotReason;
 use App\Domain\Pricing\History\SnapshotSource;
 use App\Models\AuditLog;
+use App\Models\MatchingDecision;
 use App\Models\Offer;
 use App\Models\PriceSnapshot;
 use Illuminate\Database\QueryException;
@@ -56,6 +57,37 @@ it('records a price correction as a new row and leaves history untouched', funct
     expect(PriceSnapshot::query()->count())->toBe(2)
         ->and($original->fresh()->price_minor)->toBe(2999);
 });
+
+it('refuses to update or delete a matching decision through Eloquent', function (string $operation) {
+    $decision = MatchingDecision::factory()->create();
+
+    $operation === 'update' ? $decision->update(['score' => 1]) : $decision->delete();
+})->with(['update', 'delete'])->throws(AppendOnlyViolation::class);
+
+it('refuses raw updates of matching decisions at the database level', function () {
+    MatchingDecision::factory()->create();
+
+    DB::table('matching_decisions')->update(['score' => 1]);
+})->throws(QueryException::class);
+
+it('refuses raw deletes of matching decisions at the database level', function () {
+    MatchingDecision::factory()->create();
+
+    DB::table('matching_decisions')->delete();
+})->throws(QueryException::class);
+
+it('records a rematch as a new decision that supersedes the old one exactly once', function () {
+    $original = MatchingDecision::factory()->suggested()->create();
+    $rematch = MatchingDecision::factory()->rematch($original)->create();
+
+    expect(MatchingDecision::query()->count())->toBe(2)
+        ->and($rematch->supersedes->is($original))->toBeTrue()
+        ->and($original->fresh()->supersededBy->is($rematch))->toBeTrue()
+        ->and($original->fresh()->score)->toBe(72);
+
+    // The chain is linear: a decision can be superseded only once.
+    MatchingDecision::factory()->rematch($original)->create();
+})->throws(QueryException::class);
 
 it('keeps the audit log append-only at the database level', function () {
     AuditLog::create(['actor_type' => 'system', 'action' => 'test.recorded']);
