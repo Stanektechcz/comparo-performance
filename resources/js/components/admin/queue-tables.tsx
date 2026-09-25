@@ -159,8 +159,11 @@ export function ConflictsTable({ rows }: { rows: ConflictRow[] }) {
                             <Missing />
                         ) : (
                             <ul className="flex flex-col gap-1">
-                                {row.values.map((value, index) => (
-                                    <li key={index} className="text-[12px]">
+                                {row.values.map((value) => (
+                                    <li
+                                        key={`${value.sourceType}-${value.listingId ?? 'none'}-${value.value}`}
+                                        className="text-[12px]"
+                                    >
                                         <span className="num font-bold text-text">
                                             {value.value}
                                         </span>{' '}
@@ -236,8 +239,8 @@ export function CandidatesTable({ rows }: { rows: CandidateRow[] }) {
                             <Missing />
                         ) : (
                             <ul className="flex flex-col gap-0.5 text-[12px]">
-                                {row.titles.map((title, index) => (
-                                    <li key={index}>{title}</li>
+                                {row.titles.map((title) => (
+                                    <li key={title}>{title}</li>
                                 ))}
                             </ul>
                         )}

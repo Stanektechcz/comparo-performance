@@ -75,6 +75,10 @@ class HandleInertiaRequests extends Middleware
             'created_at' => $user->created_at?->toIso8601String(),
             'updated_at' => $user->updated_at?->toIso8601String(),
             'is_staff' => $user->can(Permission::AccessStaffConsole->value),
+            'has_merchant_access' => $user->merchants()->exists(),
+            'staff_can' => [
+                'review_matching' => $user->can(Permission::ReviewMatching->value),
+            ],
         ];
     }
 }

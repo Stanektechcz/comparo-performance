@@ -7,6 +7,22 @@ export type User = {
     two_factor_enabled?: boolean;
     /** Shared by the backend on every page; staff can reach admin tools. */
     is_staff: boolean;
+    /**
+     * Shared on every page (cheap `exists()` query): true when the user
+     * belongs to at least one merchant. Drives merchant nav visibility
+     * outside `/merchant/*`; the full switcher data stays in
+     * `merchantContext`, which is only bound inside the merchant route
+     * group.
+     */
+    has_merchant_access: boolean;
+    /**
+     * Minimal staff capability flags (never the full permission list),
+     * computed via Gate/can. Present for every authenticated user; only
+     * meaningful for staff.
+     */
+    staff_can: {
+        review_matching: boolean;
+    };
     created_at: string;
     updated_at: string;
     [key: string]: unknown;

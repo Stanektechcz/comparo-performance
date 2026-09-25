@@ -112,19 +112,28 @@ function MerchantSwitcher({ context }: { context: MerchantContext }) {
     );
 }
 
-/** Merchant portal entries, rendered only when the page carries a merchant context. */
+/**
+ * Merchant portal entries. Rendered whenever the authenticated user has at
+ * least one merchant membership (`auth.user.has_merchant_access`, shared on
+ * every page), not only on `/merchant/*` pages, so the entries are reachable
+ * from the dashboard. The merchant routes resolve their own `MerchantContext`
+ * when followed. The full switcher (several merchants) stays lazy and is
+ * only shown when the page itself carries `merchantContext`.
+ */
 export function MerchantNav() {
+    const hasMerchantAccess =
+        usePage().props.auth.user?.has_merchant_access === true;
     const context = useMerchantContext();
     const path = usePage().url;
 
-    if (!context) {
+    if (!hasMerchantAccess) {
         return null;
     }
 
     return (
         <SidebarGroup className="px-2 py-0">
             <SidebarGroupLabel>Merchant</SidebarGroupLabel>
-            <MerchantSwitcher context={context} />
+            {context ? <MerchantSwitcher context={context} /> : null}
             <SidebarMenu>
                 {merchantNavItems.map((item) => (
                     <SidebarMenuItem key={item.title}>

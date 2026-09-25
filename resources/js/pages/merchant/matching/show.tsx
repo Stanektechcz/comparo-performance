@@ -2,7 +2,6 @@ import { Head } from '@inertiajs/react';
 import MatchingListingController from '@/actions/App/Http/Controllers/Merchant/Matching/MatchingListingController';
 import MatchingOverviewController from '@/actions/App/Http/Controllers/Merchant/Matching/MatchingOverviewController';
 import { DateTime, Fact } from '@/components/admin/admin-table';
-import { EvidenceParts } from '@/components/admin/candidate-comparison';
 import {
     DecisionKindChip,
     MatchScore,
@@ -18,7 +17,11 @@ import {
     MerchantDecisionPanel,
 } from '@/components/merchant/listing-decisions';
 import { MerchantPage } from '@/components/merchant/page';
-import { cn } from '@/lib/utils';
+import {
+    EvidenceParts,
+    MatchingCandidateCard,
+} from '@/components/matching/candidate-card';
+import type { ComparisonRow } from '@/components/matching/candidate-card';
 import type {
     MatchingShowProps,
     MerchantCandidate,
@@ -32,10 +35,6 @@ const bucketLabels: Record<MerchantCandidate['bucket'], string> = {
     unmatched: 'Below the match threshold',
 };
 
-const cell = 'px-3 py-2 align-top text-[12.5px]';
-const headCell =
-    'px-3 py-2 text-[10px] font-extrabold tracking-[0.11em] text-text-4 uppercase';
-
 function CandidateCard({
     listing,
     candidate,
@@ -48,8 +47,7 @@ function CandidateCard({
     canChoose: boolean;
 }) {
     const product = candidate.product;
-    const productTitle = `${product.brand ? `${product.brand} ` : ''}${product.name}`;
-    const rows = [
+    const rows: ComparisonRow[] = [
         { field: 'Brand', listing: listing.brandRaw, product: product.brand },
         {
             field: 'Title / name',
@@ -61,98 +59,34 @@ function CandidateCard({
     ];
 
     return (
-        <li className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="eyebrow">Candidate {rank}</p>
-                    <h3 className="mt-1 text-[16px] leading-tight font-extrabold break-words text-text">
-                        {productTitle}
-                    </h3>
-                    <p className="mt-0.5 text-[11.5px] text-text-3">
-                        {bucketLabels[candidate.bucket]}
-                    </p>
+        <MatchingCandidateCard
+            candidate={candidate}
+            rank={rank}
+            rows={rows}
+            meta={bucketLabels[candidate.bucket]}
+            tableCaption={`Your listing compared with ${product.brand ? `${product.brand} ` : ''}${product.name}`}
+            listingColumnLabel="Your listing"
+            productColumnLabel="Catalogue product"
+            evidenceHeading="Points per signal"
+            renderTable={(table, productTitle) => (
+                <div
+                    role="region"
+                    aria-label={`Your listing compared with ${productTitle}`}
+                    tabIndex={0}
+                    className="max-w-full overflow-x-auto"
+                >
+                    {table}
                 </div>
-                <MatchScore
-                    score={candidate.score}
-                    level={candidate.level}
-                    size="lg"
+            )}
+            action={
+                <CandidateChoice
+                    listingId={listing.id}
+                    product={product}
+                    linkedProductId={listing.linkedProductId}
+                    canChoose={canChoose}
                 />
-            </div>
-            <div
-                role="region"
-                aria-label={`Your listing compared with ${productTitle}`}
-                tabIndex={0}
-                className="max-w-full overflow-x-auto"
-            >
-                <table className="w-full border-collapse text-left">
-                    <caption className="sr-only">
-                        Your listing compared with {productTitle}
-                    </caption>
-                    <thead>
-                        <tr className="border-b border-line">
-                            <th scope="col" className={headCell}>
-                                Field
-                            </th>
-                            <th scope="col" className={headCell}>
-                                Your listing
-                            </th>
-                            <th scope="col" className={headCell}>
-                                Catalogue product
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.map((row) => (
-                            <tr
-                                key={row.field}
-                                className="border-b border-line-soft last:border-b-0"
-                            >
-                                <th
-                                    scope="row"
-                                    className={cn(
-                                        cell,
-                                        'font-bold text-text-3',
-                                    )}
-                                >
-                                    {row.field}
-                                </th>
-                                <td
-                                    className={cn(
-                                        cell,
-                                        'break-words text-text-2',
-                                    )}
-                                >
-                                    <Fact value={row.listing} />
-                                </td>
-                                <td
-                                    className={cn(
-                                        cell,
-                                        'break-words text-text',
-                                    )}
-                                >
-                                    <Fact value={row.product} />
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <div>
-                <p className="mb-1.5 text-[12px] font-extrabold text-text-2">
-                    Points per signal
-                </p>
-                <EvidenceParts
-                    parts={candidate.parts}
-                    label={`Score evidence for ${productTitle}`}
-                />
-            </div>
-            <CandidateChoice
-                listingId={listing.id}
-                product={product}
-                linkedProductId={listing.linkedProductId}
-                canChoose={canChoose}
-            />
-        </li>
+            }
+        />
     );
 }
 

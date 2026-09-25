@@ -31,7 +31,12 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
-/** Staff console entries: only rendered for staff (`auth.user.is_staff`); the server enforces each permission. */
+/**
+ * Staff console entries: only rendered when the server-computed
+ * `auth.user.staff_can.review_matching` flag is true, which mirrors the
+ * route's actual `matching.review` permission (never the full permission
+ * list). The server still enforces the permission on every request.
+ */
 const staffNavItems: NavItem[] = [
     {
         title: 'Catalogue matching',
@@ -54,7 +59,8 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-    const isStaff = usePage().props.auth.user?.is_staff === true;
+    const canReviewMatching =
+        usePage().props.auth.user?.staff_can?.review_matching === true;
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -73,7 +79,7 @@ export function AppSidebar() {
             <SidebarContent>
                 <NavMain
                     items={
-                        isStaff
+                        canReviewMatching
                             ? [...mainNavItems, ...staffNavItems]
                             : mainNavItems
                     }
