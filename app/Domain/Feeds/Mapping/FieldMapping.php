@@ -2,6 +2,7 @@
 
 namespace App\Domain\Feeds\Mapping;
 
+use App\Domain\Shared\Text\TextFold;
 use InvalidArgumentException;
 
 /**
@@ -146,12 +147,15 @@ final readonly class FieldMapping
         ));
     }
 
+    /**
+     * Lower case without diacritics ({@see TextFold::fold()}: NFD, combining
+     * marks stripped — covers every Czech and German accented letter), `ß` as
+     * `ss` (it has no decomposition), then letters and digits only.
+     */
     private static function squash(string $header): string
     {
         $local = str_contains($header, ':') ? substr($header, strrpos($header, ':') + 1) : $header;
-        $ascii = strtr(mb_strtolower(trim($local)), ['á' => 'a', 'č' => 'c', 'ď' => 'd', 'é' => 'e', 'ě' => 'e', 'í' => 'i',
-            'ň' => 'n', 'ó' => 'o', 'ř' => 'r', 'š' => 's', 'ť' => 't', 'ú' => 'u', 'ů' => 'u', 'ý' => 'y', 'ž' => 'z',
-            'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'ß' => 'ss']);
+        $ascii = str_replace('ß', 'ss', TextFold::fold($local));
 
         return preg_replace('/[^a-z0-9]+/', '', $ascii) ?? '';
     }

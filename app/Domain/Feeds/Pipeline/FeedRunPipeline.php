@@ -11,10 +11,12 @@ use App\Domain\Feeds\Jobs\FinalizeFeedRun;
 use App\Domain\Feeds\Jobs\MatchFeedItems;
 use App\Domain\Feeds\Jobs\ParseFeedPayload;
 use App\Domain\Feeds\Jobs\PublishFeedRun;
+use App\Domain\Feeds\Listeners\PublishLatestObservation;
 use App\Models\FeedRun;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
+use ReflectionProperty;
 use Throwable;
 
 /**
@@ -29,6 +31,33 @@ final class FeedRunPipeline
     public const string QUEUE_MATCHING = 'matching';
 
     public const string QUEUE_PRICING = 'pricing';
+
+    /**
+     * Every job dispatched onto the long-running connection: the stages and
+     * the latest-observation listener.
+     *
+     * @var list<class-string>
+     */
+    public const array LONG_RUNNING_JOBS = [
+        FetchFeedPayload::class,
+        ParseFeedPayload::class,
+        MatchFeedItems::class,
+        PublishFeedRun::class,
+        FinalizeFeedRun::class,
+        PublishLatestObservation::class,
+    ];
+
+    /**
+     * The longest declared `$timeout` of {@see self::LONG_RUNNING_JOBS}; the
+     * long-running connection's retry_after must exceed it.
+     */
+    public static function longestJobTimeout(): int
+    {
+        return max(array_map(
+            static fn (string $class): int => (int) (new ReflectionProperty($class, 'timeout'))->getDefaultValue(),
+            self::LONG_RUNNING_JOBS,
+        ));
+    }
 
     public function dispatch(FeedRun $run): void
     {

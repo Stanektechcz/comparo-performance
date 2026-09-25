@@ -22,6 +22,23 @@ it('defaults every flag to on', function () {
         ->and($flags->enabled(Feature::MatchingAutoPublish))->toBeTrue();
 });
 
+it('declares an explicit config default for every flag', function () {
+    foreach (Feature::cases() as $feature) {
+        expect(config()->has("features.{$feature->value}"))->toBeTrue("features.{$feature->value} is configured");
+    }
+});
+
+it('fails closed when a flag has no config key', function () {
+    config(['features' => []]);
+
+    $flags = app(FeatureFlags::class);
+
+    expect($flags->enabled(Feature::MerchantFeeds))->toBeFalse()
+        ->and($flags->enabled(Feature::FeedUrlFetch))->toBeFalse()
+        ->and($flags->enabled(Feature::MatchingAutoPublish))->toBeFalse()
+        ->and($flags->clientFlags())->toBe(['merchant-feeds' => false]);
+});
+
 it('reports only client-visible flags', function () {
     $flags = app(FeatureFlags::class)->clientFlags();
 

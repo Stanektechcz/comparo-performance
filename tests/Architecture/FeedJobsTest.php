@@ -48,8 +48,11 @@ it('bounds every feed pipeline job and puts it on a pipeline queue', function ()
 });
 
 /*
- * One arch() per forbidden dependency: with several targets, Pest's negated
- * `toUse` fails only when every target violates the rule.
+ * Pest's negated `toUse` checks every listed DEPENDENCY on its own, so one
+ * expectation may forbid several. Its weakness is several SUBJECTS in one
+ * expectation (`expect([A, B])->not->toUse(X)` fails only when every
+ * subject uses X), so each subject namespace gets its own arch(). One arch()
+ * per dependency here only makes the failure name the dependency.
  */
 foreach ([
     'App\Domain\Pricing\LandedPrice',
@@ -76,3 +79,15 @@ arch('feed events carry ids and scalars, never models')
 arch('the feed domain never reads the authenticated user')
     ->expect('App\Domain\Feeds')
     ->not->toUse(['auth', 'Illuminate\Support\Facades\Auth']);
+
+/*
+ * The Compliance context implements Matching's ComplianceHoldCheck contract
+ * (MarketComplianceHold) and nothing else of Matching: it never reaches into
+ * matching actions, queries, engine or enums.
+ */
+foreach (['App\Domain\Compliance', 'App\Domain\Compliance\Queries'] as $complianceNamespace) {
+    arch("{$complianceNamespace} uses only the Matching contracts")
+        ->expect($complianceNamespace)
+        ->not->toUse('App\Domain\Matching')
+        ->ignoring('App\Domain\Matching\Contracts');
+}

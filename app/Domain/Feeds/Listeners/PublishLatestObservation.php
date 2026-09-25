@@ -12,8 +12,12 @@ use App\Domain\Pricing\History\SnapshotSource;
 use App\Models\FeedItem;
 use App\Models\MatchingDecision;
 use App\Models\MerchantProduct;
+use App\Models\Offer;
+use DateTimeImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * A listing linked OUTSIDE the pipeline (a merchant confirming a suggestion,
@@ -24,9 +28,12 @@ use Illuminate\Support\Facades\Date;
  * run's publish stage publishes its own, current observation, and publishing
  * an older one here could overwrite it. Nothing happens when the listing is
  * no longer linked or no staged observation is left (items are pruned; the
- * next run publishes then).
+ * next run publishes then). An observation OLDER than the offer's current
+ * `source_updated_at` is skipped too: the offer never moves back in time (an
+ * equally old one is the same observation and may reactivate the offer).
  *
- * Queued on `pricing` over the long-running connection, after commit.
+ * Queued on `pricing` over the long-running connection, after commit. A job
+ * that fails for good is logged with the listing and decision ids only.
  */
 final class PublishLatestObservation implements ShouldQueue
 {
@@ -78,7 +85,34 @@ final class PublishLatestObservation implements ShouldQueue
 
         $observedAt = Date::instance($item->run->fetched_at ?? $item->run->started_at ?? Date::now())->toDateTimeImmutable();
 
+        if ($this->offerIsNewerThan($listing, $observedAt)) {
+            return;
+        }
+
         $this->publishOffer->handle($listing, FeedItemListing::terms($item), new PublishContext(SnapshotSource::Feed, $item->feed_run_id, $observedAt));
+    }
+
+    /**
+     * Called by the queue once the job has failed for good. Ids only: the
+     * exception message may contain SQL or merchant data.
+     */
+    public function failed(ProductMatched $event, Throwable $exception): void
+    {
+        Log::error('Publishing the latest feed observation of a matched listing failed.', [
+            'merchant_product_id' => $event->listingId,
+            'matching_decision_id' => $event->decisionId,
+            'exception' => $exception::class,
+        ]);
+    }
+
+    /**
+     * The listing's offer already carries a strictly newer observation.
+     */
+    private function offerIsNewerThan(MerchantProduct $listing, DateTimeImmutable $observedAt): bool
+    {
+        $offerUpdatedAt = Offer::query()->where('merchant_product_id', $listing->id)->value('source_updated_at');
+
+        return $offerUpdatedAt !== null && Date::parse($offerUpdatedAt)->getTimestamp() > $observedAt->getTimestamp();
     }
 
     private function latestObservation(MerchantProduct $listing): ?FeedItem

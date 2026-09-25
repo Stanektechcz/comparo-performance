@@ -58,16 +58,6 @@ final class ListingMarkets
 
     public static function market(?Country $country): ?MarketContext
     {
-        if ($country === null) {
-            return null;
-        }
-
-        return new MarketContext(
-            countryId: $country->id,
-            code: $country->code,
-            name: $country->name,
-            currency: $country->currency->code,
-            locale: $country->default_locale.'-'.$country->code,
-        );
+        return $country === null ? null : MarketContext::fromCountry($country);
     }
 }

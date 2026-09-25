@@ -2,6 +2,7 @@
 
 use App\Domain\Compliance\ComplianceStatus;
 use App\Domain\Feeds\Actions\FeedActor;
+use App\Domain\Feeds\Actions\ReconcileMissingListings;
 use App\Domain\Feeds\Actions\StartFeedRun;
 use App\Domain\Feeds\FeedItemMatchStatus;
 use App\Domain\Feeds\FeedItemValidationStatus;
@@ -36,10 +37,13 @@ use App\Models\PriceSnapshot;
 use App\Models\Product;
 use App\Models\ProductComplianceRule;
 use App\Models\User;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Feeds\FeedPipelineFixtures;
@@ -274,6 +278,40 @@ it('lets the pipeline publish its own links: the listener skips decisions made b
     expect(offerOf($listing)?->price_minor)->toBe(1999);
 });
 
+it('never moves an offer back in time: the listener skips an observation older than the offer', function () {
+    $listing = MerchantProduct::factory()->fromFeed($this->source)->create(['product_id' => $this->whey->id]);
+    $run = FeedRun::factory()->forSource($this->source)->completed()->create(['fetched_at' => now()->subHour()]);
+    FeedItem::factory()->create(['feed_run_id' => $run->id, 'row_number' => 1, 'merchant_product_id' => $listing->id, 'price_minor' => 1999]);
+    $offer = Offer::factory()->create(['merchant_product_id' => $listing->id, 'product_id' => $this->whey->id, 'merchant_id' => $listing->merchant_id, 'price_minor' => 2500, 'source_updated_at' => now()]);
+    $decision = MatchingDecision::factory()->forListing($listing)->create();
+
+    app(PublishLatestObservation::class)->handle(new ProductMatched($listing->id, $listing->merchant_id, $this->whey->id, null, 'manual', $decision->id));
+
+    expect($offer->refresh()->price_minor)->toBe(2500)
+        ->and($offer->last_feed_run_id)->not->toBe($run->id);
+
+    $offer->forceFill(['source_updated_at' => now()->subHours(2)])->save();
+    app(PublishLatestObservation::class)->handle(new ProductMatched($listing->id, $listing->merchant_id, $this->whey->id, null, 'manual', $decision->id));
+
+    expect($offer->refresh()->price_minor)->toBe(1999)
+        ->and($offer->last_feed_run_id)->toBe($run->id);
+});
+
+it('logs a listener that failed for good with the listing and decision ids only', function () {
+    Log::spy();
+
+    app(PublishLatestObservation::class)->failed(
+        new ProductMatched(11, 22, 33, null, 'manual', 44),
+        new RuntimeException('SQLSTATE[23505] https://peaksupps.de/feeds/products.csv?token=s3cret-feed-token'),
+    );
+
+    Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message, array $context): bool => $context === [
+        'merchant_product_id' => 11,
+        'matching_decision_id' => 44,
+        'exception' => RuntimeException::class,
+    ] && ! str_contains($message, 's3cret'));
+});
+
 it('never publishes a product that is not allowed in the feed market, and hides an offer published before the ban', function () {
     runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.54')]);
     $listing = listingOf($this->source, 'PEA-186');
@@ -291,6 +329,23 @@ it('never publishes a product that is not allowed in the feed market, and hides 
         ->and($offer?->price_minor)->toBe(4054)
         ->and($offer?->deactivation_reason)->toBe(OfferDeactivationReason::ComplianceHold);
     $this->get(route('products.show', $this->whey->slug))->assertInertia(fn (Assert $page) => $page->has('offers', 0));
+});
+
+it('hides again the offer of a reused compliance hold that was re-activated outside the pipeline', function () {
+    runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.54')]);
+    ProductComplianceRule::query()->where('product_id', $this->whey->id)->update(['status' => ComplianceStatus::NotAllowed->value]);
+    runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '39.90')]);
+    $listing = listingOf($this->source, 'PEA-186');
+    // e.g. the prototype demo importer or a direct write
+    Offer::query()->where('merchant_product_id', $listing->id)->update(['is_active' => true, 'deactivated_at' => null, 'deactivation_reason' => null]);
+
+    $run = runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '39.50')]);
+
+    expect(FeedItem::query()->where('feed_run_id', $run->id)->sole()->only(['match_status', 'diff_action']))
+        ->toBe(['match_status' => FeedItemMatchStatus::Reused, 'diff_action' => 'held'])
+        ->and($run->offers_deactivated)->toBe(1)
+        ->and(offerOf($listing)?->is_active)->toBeFalse()
+        ->and(offerOf($listing)?->deactivation_reason)->toBe(OfferDeactivationReason::ComplianceHold);
 });
 
 it('never creates an offer for a product blocked from the first run', function () {
@@ -420,4 +475,51 @@ it('lets a small feed below the guard minimum drop a SKU without holding the rem
         ->and($run->offers_deactivated)->toBe(1)
         ->and(FeedError::query()->where('feed_run_id', $run->id)->where('code', 'MASS_REMOVAL_HELD')->exists())->toBeFalse()
         ->and(offerOf(listingOf($this->source, 'PEA-210'))?->is_active)->toBeFalse();
+});
+
+it('matches a 50-item chunk with a bounded number of catalogue queries, not one per item', function () {
+    config(['comparo.feeds.pipeline_chunk' => 50]);
+    $products = collect(range(1, 50))->map(fn (int $i): Product => MatchingScenario::product("Forge Line {$i}", "Protein Bar Crunch {$i}", '60 g'));
+    Bus::fake();
+    $run = runCatalogueFeed($this->source, $products->map(fn (Product $product, int $i): string => catalogueRow($product, "BAR-{$i}", '2.50'))->all());
+    $stage = fn (object $job) => app()->call([$job->withFakeQueueInteractions(), 'handle']);
+    $stage(new FetchFeedPayload($run->id, $run->feed_source_id));
+    $stage(new ParseFeedPayload($run->id));
+    $catalogueQueries = 0;
+    DB::listen(function (QueryExecuted $query) use (&$catalogueQueries): void {
+        $catalogueQueries += preg_match('/\bfrom\s+"products"/i', $query->sql);
+    });
+
+    $stage(new MatchFeedItems($run->id));
+
+    expect(FeedItem::query()->where('feed_run_id', $run->id)->where('match_status', FeedItemMatchStatus::Auto->value)->count())->toBe(50)
+        ->and(MerchantProduct::query()->where('feed_source_id', $this->source->id)->orderBy('product_id')->pluck('product_id')->all())->toBe($products->pluck('id')->sort()->values()->all())
+        ->and($catalogueQueries)->toBeLessThanOrEqual(3); // EAN prefetch, brand prefetch, candidate details
+});
+
+it('deactivates dropped SKUs chunk by chunk with their reason, and a repeated reconciliation changes nothing', function () {
+    config(['comparo.feeds.pipeline_chunk' => 1]);
+    runCatalogueFeed($this->source, [
+        catalogueRow($this->whey, 'PEA-186', '40.54'),
+        catalogueRow($this->creatine, 'PEA-210', '27.90'),
+        catalogueRow($this->concentrate, 'PEA-190', '32.90'),
+    ]);
+    runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.50')]);
+
+    $run = runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.40')]);
+
+    $dropped = [listingOf($this->source, 'PEA-210'), listingOf($this->source, 'PEA-190')];
+    expect($run->offers_deactivated)->toBe(2)
+        ->and(FeedError::query()->where('feed_run_id', $run->id)->where('code', 'MASS_REMOVAL_HELD')->exists())->toBeFalse();
+    foreach ($dropped as $listing) {
+        expect($listing->only(['status', 'missing_run_count']))->toBe(['status' => ListingStatus::Missing, 'missing_run_count' => 2])
+            ->and(offerOf($listing)?->only(['is_active', 'deactivation_reason']))->toBe(['is_active' => false, 'deactivation_reason' => OfferDeactivationReason::MissingFromFeed]);
+    }
+
+    $again = app(ReconcileMissingListings::class)->handle($run, now()->toDateTimeImmutable());
+
+    expect($again->deactivated)->toBe(0)
+        ->and($run->refresh()->offers_deactivated)->toBe(2)
+        ->and(listingOf($this->source, 'PEA-210')->missing_run_count)->toBe(2)
+        ->and(offerOf(listingOf($this->source, 'PEA-186'))?->is_active)->toBeTrue();
 });

@@ -2,21 +2,23 @@
 
 namespace App\Http\Presenters\Merchant;
 
+use App\Domain\Feeds\Queries\FeedRunErrors;
 use App\Models\FeedError;
 use App\Models\FeedRun;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Streams every stored error of one (already merchant-scoped) run as CSV.
+ * Streams every stored error of one (already merchant-scoped) run as CSV,
+ * read lazily in chunks through {@see FeedRunErrors::cursor()}.
  *
  * Cells are neutralised against spreadsheet formula injection (§8): a value
- * starting with = + - @ TAB or CR is prefixed with a single quote. No domain
- * query streams all error rows yet (FeedRunErrors pages), so the run's own
- * relation is read lazily in chunks here.
+ * starting with = + - @ TAB or CR is prefixed with a single quote.
  */
 final class FeedErrorCsv
 {
     private const int CHUNK = 500;
+
+    public function __construct(private readonly FeedRunErrors $errors) {}
 
     /** @var list<string> */
     private const array HEADER = ['row', 'merchant_sku', 'severity', 'code', 'field', 'message'];
@@ -38,21 +40,16 @@ final class FeedErrorCsv
             fwrite($out, "\xEF\xBB\xBF");
             self::put($out, self::HEADER);
 
-            $run->feedErrors()
-                ->with('item:id,merchant_sku')
-                ->orderBy('row_number')
-                ->orderBy('id')
-                ->lazy(self::CHUNK)
-                ->each(static function (FeedError $error) use ($out): void {
-                    self::put($out, [
-                        $error->row_number === null ? '' : (string) $error->row_number,
-                        (string) $error->item?->merchant_sku,
-                        $error->severity->value,
-                        $error->code,
-                        (string) FeedMessages::fieldLabel($error->field),
-                        FeedMessages::message($error->code, $error->message_params),
-                    ]);
-                });
+            $this->errors->cursor($run, self::CHUNK)->each(static function (FeedError $error) use ($out): void {
+                self::put($out, [
+                    $error->row_number === null ? '' : (string) $error->row_number,
+                    (string) $error->item?->merchant_sku,
+                    $error->severity->value,
+                    $error->code,
+                    (string) FeedMessages::fieldLabel($error->field),
+                    FeedMessages::message($error->code, $error->message_params),
+                ]);
+            });
 
             fclose($out);
         }, $filename, [

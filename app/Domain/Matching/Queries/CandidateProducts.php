@@ -29,11 +29,20 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * The brand/alias index and loaded candidates are kept for the lifetime of the
  * instance: resolve one instance per feed run and reuse it.
+ *
+ * {@see self::prime()} prefetches a whole chunk of listings (all their EANs,
+ * all their matched brands) so {@see self::candidateIds()} serves them from
+ * memory instead of issuing one or two queries per listing; facts that were
+ * not primed still fall back to their own queries, so results never depend
+ * on priming (tests/Feature/Matching/NarrowingParityTest.php).
  */
 final class CandidateProducts
 {
     /** Loaded candidates kept in memory before the memo is reset. */
     private const int MEMO_LIMIT = 5000;
+
+    /** Keys (EANs, brand ids) per prefetch query (parameter limits). */
+    private const int PRIME_BATCH = 500;
 
     /** @var list<array{id: int, fold: string}>|null */
     private ?array $brands = null;
@@ -47,6 +56,12 @@ final class CandidateProducts
     /** @var array<int, CandidateProduct> */
     private array $memo = [];
 
+    /** @var array<string, list<int>> primed EAN => active product ids (ascending) */
+    private array $primedEans = [];
+
+    /** @var array<int, list<int>> primed brand id => active product ids (ascending) */
+    private array $primedBrands = [];
+
     public function __construct(private readonly MatchingCatalogue $catalogue) {}
 
     /**
@@ -55,6 +70,59 @@ final class CandidateProducts
     public function for(FeedItemFacts $item): array
     {
         return $this->load($this->candidateIds($item));
+    }
+
+    /**
+     * Prefetch the candidates of a chunk of listings: the active products of
+     * all their EANs and of all their matched brands (one query each per
+     * {@see self::PRIME_BATCH} keys), then the candidate details in batches.
+     * Replaces the previous prime, so memory stays bounded by one chunk.
+     *
+     * @param  list<FeedItemFacts>  $items
+     */
+    public function prime(array $items): void
+    {
+        $eans = [];
+        $brandIds = [];
+
+        foreach ($items as $item) {
+            if (ListingFacts::isPresent($item->ean)) {
+                $eans[(string) $item->ean] = true;
+            }
+
+            foreach ($this->matchingBrandIds($item) as $brandId) {
+                $brandIds[$brandId] = true;
+            }
+        }
+
+        $this->primedEans = [];
+        $this->primedBrands = [];
+        $eanList = array_map(strval(...), array_keys($eans));
+        $productIds = [];
+
+        foreach (array_chunk($eanList, self::PRIME_BATCH) as $batch) {
+            $this->primedEans += array_fill_keys($batch, []);
+
+            foreach ($this->activeProducts(fn ($query) => $query->whereIn('ean', $batch), 'ean') as [$id, $ean]) {
+                $this->primedEans[(string) $ean][] = $id;
+                $productIds[$id] = true;
+            }
+        }
+
+        foreach (array_chunk(array_keys($brandIds), self::PRIME_BATCH) as $batch) {
+            $this->primedBrands += array_fill_keys($batch, []);
+
+            foreach ($this->activeProducts(fn ($query) => $query->whereIn('brand_id', $batch), 'brand_id') as [$id, $brandId]) {
+                $this->primedBrands[(int) $brandId][] = $id;
+                $productIds[$id] = true;
+            }
+        }
+
+        if ($productIds !== [] && count($productIds) <= self::MEMO_LIMIT) {
+            $ids = array_keys($productIds);
+            sort($ids);
+            $this->load($ids);
+        }
     }
 
     /**
@@ -67,13 +135,23 @@ final class CandidateProducts
         $ids = [];
 
         if (ListingFacts::isPresent($item->ean)) {
-            $ids = $this->activeProductIds(fn ($query) => $query->where('ean', $item->ean));
+            $ids = array_key_exists((string) $item->ean, $this->primedEans)
+                ? $this->primedEans[(string) $item->ean]
+                : $this->activeProductIds(fn ($query) => $query->where('ean', $item->ean));
         }
 
-        $brandIds = $this->matchingBrandIds($item);
+        $unprimedBrandIds = [];
 
-        if ($brandIds !== []) {
-            $ids = [...$ids, ...$this->activeProductIds(fn ($query) => $query->whereIn('brand_id', $brandIds))];
+        foreach ($this->matchingBrandIds($item) as $brandId) {
+            if (array_key_exists($brandId, $this->primedBrands)) {
+                $ids = [...$ids, ...$this->primedBrands[$brandId]];
+            } else {
+                $unprimedBrandIds[] = $brandId;
+            }
+        }
+
+        if ($unprimedBrandIds !== []) {
+            $ids = [...$ids, ...$this->activeProductIds(fn ($query) => $query->whereIn('brand_id', $unprimedBrandIds))];
         }
 
         $ids = array_values(array_unique($ids));
@@ -159,6 +237,22 @@ final class CandidateProducts
         $ids = $query->orderBy('id')->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
 
         return $ids;
+    }
+
+    /**
+     * Active products matching the constraint as [id, key column value] pairs, by id.
+     *
+     * @param  callable(Builder<Product>): mixed  $constraint
+     * @return list<array{0: int, 1: mixed}>
+     */
+    private function activeProducts(callable $constraint, string $keyColumn): array
+    {
+        $query = Product::query()->where('status', ProductStatus::Active);
+        $constraint($query);
+
+        return array_values($query->orderBy('id')->toBase()->get(['id', $keyColumn])
+            ->map(static fn (object $row): array => [(int) $row->id, $row->{$keyColumn}])
+            ->all());
     }
 
     /**

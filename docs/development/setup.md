@@ -152,10 +152,24 @@ DB_USERNAME=comparo DB_PASSWORD=comparo php -d extension=pdo_pgsql artisan test 
 Phase 2 feed jobs run up to 900s. They dispatch onto the `redis-long` / `database-long` connections
 (config/queue.php), whose `retry_after` (`QUEUE_LONG_RETRY_AFTER`, default 960s) is kept above every
 job's timeout so a worker never picks up a duplicate of a still-running job. `config('comparo.queues.long_running_connection')`
-is what job classes should read (`QUEUE_LONG_CONNECTION`, falling back to `QUEUE_CONNECTION`); tests
-set `QUEUE_CONNECTION=sync`, so these jobs run inline in the suite with no extra setup. In production,
-Horizon runs three dedicated supervisors on `redis-long` (config/horizon.php): `feed-import` (900s),
-`matching` (300s), `pricing` (300s), alongside the existing `default` queue's supervisor.
+is what job classes read. `QUEUE_LONG_CONNECTION` wins; otherwise the default is derived from
+`QUEUE_CONNECTION`:
+
+| `QUEUE_CONNECTION` | long-running connection |
+|---|---|
+| `sync` | `sync` (tests: the pipeline runs inline, no extra setup) |
+| `database` | `database-long` |
+| `redis` | `redis-long` |
+| anything else | the same connection — it must then have a long `retry_after` itself |
+
+Never point `QUEUE_LONG_CONNECTION` at `database` or `redis`: their `retry_after` is 90s, so a 900s parse
+would be delivered twice. `App\Domain\Platform\Queues\LongRunningQueue` checks this at boot: when the
+chosen connection's `retry_after` is not greater than the longest feed job timeout
+(`FeedRunPipeline::longestJobTimeout()`, 900s), it logs a critical message (console processes such as queue
+workers) and, in `local`/`testing`, throws `LongRunningQueueMisconfigured` so every artisan command fails
+until it is fixed. In production, Horizon runs three dedicated supervisors on `redis-long`
+(config/horizon.php): `feed-import` (900s), `matching` (300s), `pricing` (300s), alongside the existing
+`default` queue's supervisor.
 
 ## 7. Prototype parity fixtures
 

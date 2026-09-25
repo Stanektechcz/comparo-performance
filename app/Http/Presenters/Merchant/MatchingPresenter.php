@@ -7,6 +7,7 @@ use App\Domain\Matching\MatchDecisionKind;
 use App\Domain\Matching\Queries\DecisionHistoryEntry;
 use App\Domain\Matching\Queries\PreviewCandidate;
 use App\Domain\Matching\Queries\QueueListing;
+use App\Domain\Merchants\Queries\MerchantNames;
 use App\Domain\Platform\Markets\MarketContext;
 use App\Http\Presenters\Admin\MatchingFormat;
 use App\Models\MerchantProduct;
@@ -27,7 +28,10 @@ final class MatchingPresenter
 
     public const string DECIDED_BY_STAFF = 'Comparo team';
 
-    public function __construct(private readonly MatchingFormat $format) {}
+    public function __construct(
+        private readonly MatchingFormat $format,
+        private readonly MerchantNames $names,
+    ) {}
 
     /**
      * @param  LengthAwarePaginator<int, QueueListing>  $page
@@ -174,44 +178,28 @@ final class MatchingPresenter
      */
     private function memberNames(int $merchantId, array $entries): array
     {
-        $ids = array_values(array_unique(array_filter(
+        return $this->names->members($merchantId, array_values(array_filter(
             array_map(static fn (DecisionHistoryEntry $entry): ?int => $entry->decidedByUserId, $entries),
             is_int(...),
         )));
-
-        if ($ids === []) {
-            return [];
-        }
-
-        /** @var array<int, string> $names */
-        $names = User::query()
-            ->whereIn('users.id', $ids)
-            ->whereHas('merchants', static fn ($query) => $query->whereKey($merchantId))
-            ->pluck('name', 'id')
-            ->all();
-
-        return $names;
     }
 
     /**
-     * What the listing's state allows (mirrors DecideMatch and
-     * ProposeProductCandidate; the actions re-check under a row lock).
+     * What the listing's state allows ({@see ListingMatchStatus::allowedManualActions()},
+     * the rule DecideMatch applies, plus ProposeProductCandidate's; the
+     * actions re-check under a row lock).
      *
      * @return array{confirm: bool, choose: bool, reject: bool, propose: bool}
      */
     private static function actions(MerchantProduct $listing, ?DecisionHistoryEntry $current): array
     {
         $status = $listing->match_status;
-        $rejectable = in_array($status, [
-            ListingMatchStatus::Suggested, ListingMatchStatus::Auto, ListingMatchStatus::Manual, ListingMatchStatus::ComplianceHold,
-        ], true);
 
         return [
-            'confirm' => $status === ListingMatchStatus::Suggested
-                && $current?->kind === MatchDecisionKind::Suggested
-                && $current->product !== null,
-            'choose' => ! $status->isLinked(),
-            'reject' => $rejectable && ($listing->product_id ?? $current?->product?->id) !== null,
+            ...$status->allowedManualActions(
+                hasPendingSuggestion: $current?->kind === MatchDecisionKind::Suggested && $current->product !== null,
+                hasAssociatedProduct: ($listing->product_id ?? $current?->product?->id) !== null,
+            ),
             'propose' => in_array($status, [ListingMatchStatus::Unmatched, ListingMatchStatus::Suggested], true)
                 && trim((string) $listing->title) !== '',
         ];

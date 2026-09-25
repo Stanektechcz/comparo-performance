@@ -60,9 +60,10 @@ final class DecideMatch
             $locked = $this->lock($listing, $actor);
             $current = $this->currentDecision($locked);
 
-            if ($locked->match_status !== ListingMatchStatus::Suggested
-                || $current?->kind !== MatchDecisionKind::Suggested
-                || $current->product_id === null) {
+            $hasPendingSuggestion = $current?->kind === MatchDecisionKind::Suggested && $current->product_id !== null;
+
+            if (! $locked->match_status->allowedManualActions($hasPendingSuggestion, false)['confirm']
+                || $current?->product_id === null) {
                 throw MatchDecisionNotAllowed::nothingToConfirm($locked->id);
             }
 
@@ -88,7 +89,7 @@ final class DecideMatch
         return DB::transaction(function () use ($listing, $productId, $actor, $decidedAt, $complianceHold, $note): MatchingDecision {
             $locked = $this->lock($listing, $actor);
 
-            if ($locked->match_status->isLinked() && $locked->product_id !== $productId) {
+            if (! $locked->match_status->allowsChoosingProduct() && $locked->product_id !== $productId) {
                 throw MatchDecisionNotAllowed::alreadyLinked($locked->id);
             }
 
@@ -112,11 +113,7 @@ final class DecideMatch
         return DB::transaction(function () use ($listing, $actor, $decidedAt, $note): MatchingDecision {
             $locked = $this->lock($listing, $actor);
             $rejectedProductId = $locked->product_id ?? $this->currentDecision($locked)?->product_id;
-            $rejectable = in_array($locked->match_status, [
-                ListingMatchStatus::Suggested, ListingMatchStatus::Auto, ListingMatchStatus::Manual, ListingMatchStatus::ComplianceHold,
-            ], true);
-
-            if (! $rejectable || $rejectedProductId === null) {
+            if (! $locked->match_status->allowedManualActions(false, $rejectedProductId !== null)['reject'] || $rejectedProductId === null) {
                 throw MatchDecisionNotAllowed::nothingToReject($locked->id);
             }
 

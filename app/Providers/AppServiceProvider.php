@@ -6,6 +6,7 @@ use App\Domain\Feeds\Fetching\DnsHostResolver;
 use App\Domain\Feeds\Fetching\FeedFetcher;
 use App\Domain\Feeds\Fetching\HostResolver;
 use App\Domain\Feeds\Listeners\PublishLatestObservation;
+use App\Domain\Feeds\Pipeline\FeedRunPipeline;
 use App\Domain\Matching\Events\ProductMatched;
 use App\Domain\Offers\Events\OfferDeactivated;
 use App\Domain\Offers\Events\OfferPublished;
@@ -13,6 +14,7 @@ use App\Domain\Offers\Events\OfferRelinked;
 use App\Domain\Platform\Cache\CatalogCacheVersion;
 use App\Domain\Platform\Listeners\BumpProductCacheVersion;
 use App\Domain\Platform\Markets\MarketResolver;
+use App\Domain\Platform\Queues\LongRunningQueue;
 use App\Domain\Pricing\Events\PriceChanged;
 use App\Models\Country;
 use App\Models\Coupon;
@@ -67,6 +69,24 @@ class AppServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
         $this->invalidateCatalogCacheOnChange();
         $this->registerDomainListeners();
+        $this->guardLongRunningQueue();
+    }
+
+    /**
+     * The long-running connection must not re-deliver a feed job that is
+     * still running ({@see LongRunningQueue}). Local and testing throw, so the
+     * mistake never ships; elsewhere it is logged as critical when a console
+     * process (queue worker, scheduler, artisan) boots, not on every request.
+     */
+    protected function guardLongRunningQueue(): void
+    {
+        $strict = $this->app->environment('local', 'testing');
+
+        if (! $strict && ! $this->app->runningInConsole()) {
+            return;
+        }
+
+        $this->app->make(LongRunningQueue::class)->guard(FeedRunPipeline::longestJobTimeout(), $strict);
     }
 
     /**

@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Platform\Queues\LongRunningQueue;
+
 return [
 
     /*
@@ -37,15 +39,20 @@ return [
     | Queues
     |--------------------------------------------------------------------------
     |
-    | Long-running feed/matching/pricing jobs dispatch onto this connection
-    | (config/queue.php: redis-long / database-long). Defaults to whatever
-    | the app's normal queue connection is, so tests (QUEUE_CONNECTION=sync)
-    | run them synchronously without extra setup.
+    | Long-running feed/matching/pricing jobs dispatch onto this connection.
+    | QUEUE_LONG_CONNECTION wins; otherwise the default follows
+    | QUEUE_CONNECTION: sync → sync (tests run the pipeline inline),
+    | database → database-long, redis → redis-long (config/queue.php, whose
+    | retry_after QUEUE_LONG_RETRY_AFTER exceeds the 900 s feed parser).
+    | App\Domain\Platform\Queues\LongRunningQueue guards it at boot.
     |
     */
 
     'queues' => [
-        'long_running_connection' => env('QUEUE_LONG_CONNECTION', env('QUEUE_CONNECTION', 'database')),
+        'long_running_connection' => env(
+            'QUEUE_LONG_CONNECTION',
+            LongRunningQueue::defaultConnectionFor((string) env('QUEUE_CONNECTION', 'database')),
+        ),
     ],
 
     /*

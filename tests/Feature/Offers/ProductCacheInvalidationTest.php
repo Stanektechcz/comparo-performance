@@ -5,8 +5,10 @@ use App\Domain\Offers\Events\OfferPublished;
 use App\Domain\Offers\Events\OfferRelinked;
 use App\Domain\Platform\Cache\CatalogCacheVersion;
 use App\Domain\Pricing\Events\PriceChanged;
+use App\Models\Merchant;
 use App\Models\Offer;
 use App\Models\Product;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 
 it('bumps the product version when an offer event is dispatched', function (Closure $makeEvent) {
@@ -86,4 +88,29 @@ it('bumps the original product too when a direct write moves an offer', function
 
     expect($versions->forProduct($originalProductId))->not->toBe($before[0])
         ->and($versions->forProduct($new->id))->not->toBe($before[1]);
+});
+
+it('bumps every product a merchant lists in bounded batches, and no other merchant\'s products', function () {
+    $merchant = Merchant::factory()->create();
+    $products = Product::factory()->count(5)->create();
+    foreach ($products as $product) {
+        Offer::factory()->create(['merchant_id' => $merchant->id, 'product_id' => $product->id]);
+    }
+    Offer::factory()->create(['merchant_id' => $merchant->id, 'product_id' => $products[0]->id]);
+    $foreign = Offer::factory()->create();
+    $versions = new CatalogCacheVersion(merchantBatch: 2);
+    $before = $products->mapWithKeys(fn (Product $product): array => [$product->id => $versions->forProduct($product->id)])->all();
+    $foreignBefore = $versions->forProduct($foreign->product_id);
+    $queries = [];
+    DB::listen(function (QueryExecuted $query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    $versions->bumpMerchant($merchant->id);
+
+    foreach ($before as $productId => $version) {
+        expect($versions->forProduct($productId))->not->toBe($version);
+    }
+    expect($versions->forProduct($foreign->product_id))->toBe($foreignBefore)
+        ->and($queries)->toHaveCount(3); // 2 + 2 + 1 distinct product ids
 });

@@ -77,3 +77,20 @@ it('rejects unknown fields and blank sources', function (array $map) {
     'blank source' => [['title' => ' ']],
     'non-string source' => [['title' => 5]],
 ])->throws(InvalidArgumentException::class);
+
+it('folds upper-case Czech and German headers onto their synonyms', function () {
+    $mapping = FieldMapping::suggest(['KÓD', 'NÁZEV', 'VÝROBCE', 'Čárový kód', 'PŘÍCHUŤ', 'Balení', 'Počet kusů', 'Preis', 'Währung', 'Verfügbarkeit', 'Ďalší', 'Straße']);
+
+    expect($mapping->toArray())->toBe([
+        'merchant_sku' => 'KÓD',
+        'gtin' => 'Čárový kód',
+        'title' => 'NÁZEV',
+        'brand' => 'VÝROBCE',
+        'variant' => 'PŘÍCHUŤ',
+        'pack_size' => 'Balení',
+        'price' => 'Preis',
+        'currency' => 'Währung',
+        'stock' => 'Počet kusů',
+        'availability' => 'Verfügbarkeit',
+    ]);
+});

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Merchant\Support;
 
 use App\Domain\Feeds\Queries\FeedRunHistory;
 use App\Domain\Feeds\Queries\MerchantFeedSources;
+use App\Domain\Matching\Queries\MerchantListings;
 use App\Domain\Merchants\MerchantContext;
 use App\Models\FeedRun;
 use App\Models\FeedSource;
@@ -26,6 +27,7 @@ final class MerchantScope
         private readonly MerchantContext $context,
         private readonly MerchantFeedSources $sources,
         private readonly FeedRunHistory $runs,
+        private readonly MerchantListings $listings,
     ) {}
 
     public function merchantId(): int
@@ -58,18 +60,14 @@ final class MerchantScope
     }
 
     /**
-     * No merchant-scoped single-listing query exists in App\Domain\Matching
-     * yet (MerchantMatchingQueue only pages), so this is the one read helper
-     * kept in the HTTP layer: the merchant id comes from the context, never
-     * from the request.
+     * A listing of this merchant (the merchant id comes from the context,
+     * never from the request).
      *
      * @throws ModelNotFoundException<MerchantProduct>
      */
     public function listing(int $listingId): MerchantProduct
     {
-        return MerchantProduct::query()
-            ->where('merchant_id', $this->context->merchantId)
-            ->findOrFail($listingId);
+        return $this->listings->find($this->context->merchantId, $listingId);
     }
 
     /**

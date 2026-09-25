@@ -3,13 +3,13 @@
 namespace App\Http\Presenters\Admin;
 
 use App\Domain\Accounts\Authorization\Permission;
+use App\Domain\Catalog\Queries\ProductFlavours;
 use App\Domain\Matching\ListingMatchStatus;
 use App\Domain\Matching\MatchDecisionKind;
 use App\Domain\Matching\Queries\DecisionHistoryEntry;
 use App\Domain\Matching\Queries\PreviewCandidate;
 use App\Domain\Platform\Markets\MarketContext;
 use App\Models\MerchantProduct;
-use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -32,6 +32,7 @@ final class MatchingListingPresenter
     public function __construct(
         private readonly MatchingFormat $format,
         private readonly ReferenceNames $names,
+        private readonly ProductFlavours $flavours,
     ) {}
 
     /**
@@ -128,18 +129,7 @@ final class MatchingListingPresenter
      */
     private function candidates(array $candidates): array
     {
-        $productIds = array_map(static fn (PreviewCandidate $candidate): int => $candidate->product->id, $candidates);
-        $variants = [];
-
-        if ($productIds !== []) {
-            foreach (ProductVariant::query()
-                ->whereIn('product_id', $productIds)
-                ->where('kind', ProductVariant::FLAVOUR)
-                ->orderBy('position')
-                ->get(['product_id', 'name']) as $variant) {
-                $variants[$variant->product_id][] = $variant->name;
-            }
-        }
+        $variants = $this->flavours->of(array_map(static fn (PreviewCandidate $candidate): int => $candidate->product->id, $candidates));
 
         return array_map(fn (PreviewCandidate $candidate): array => [
             'product' => [
@@ -168,24 +158,21 @@ final class MatchingListingPresenter
     }
 
     /**
-     * What the listing's state allows (mirrors DecideMatch / Rematch; the
-     * actions re-check under a row lock).
+     * What the listing's state allows ({@see ListingMatchStatus::allowedManualActions()},
+     * the rule DecideMatch applies, plus Rematch's; the actions re-check
+     * under a row lock).
      *
      * @return array{confirm: bool, choose: bool, reject: bool, rematch: bool}
      */
     private static function actions(MerchantProduct $listing, ?DecisionHistoryEntry $current): array
     {
         $status = $listing->match_status;
-        $rejectable = in_array($status, [
-            ListingMatchStatus::Suggested, ListingMatchStatus::Auto, ListingMatchStatus::Manual, ListingMatchStatus::ComplianceHold,
-        ], true);
 
         return [
-            'confirm' => $status === ListingMatchStatus::Suggested
-                && $current?->kind === MatchDecisionKind::Suggested
-                && $current->product !== null,
-            'choose' => ! $status->isLinked(),
-            'reject' => $rejectable && ($listing->product_id ?? $current?->product?->id) !== null,
+            ...$status->allowedManualActions(
+                hasPendingSuggestion: $current?->kind === MatchDecisionKind::Suggested && $current->product !== null,
+                hasAssociatedProduct: ($listing->product_id ?? $current?->product?->id) !== null,
+            ),
             'rematch' => $status->isLinked() && $listing->product_id !== null,
         ];
     }

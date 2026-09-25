@@ -72,6 +72,19 @@ final class MatchListing
         private readonly LinkListing $linkListing,
     ) {}
 
+    /**
+     * Prefetch the narrowed candidates of a chunk of listings about to be
+     * matched with this instance (a handful of queries for the whole chunk
+     * instead of one or two per listing). Optional: results are identical
+     * without it.
+     *
+     * @param  list<MerchantProduct>  $listings
+     */
+    public function prime(array $listings): void
+    {
+        $this->candidates->prime(array_map(ListingFacts::of(...), $listings));
+    }
+
     public function handle(MerchantProduct $listing, MatchContext $context): MatchOutcome
     {
         $facts = ListingFacts::of($listing);

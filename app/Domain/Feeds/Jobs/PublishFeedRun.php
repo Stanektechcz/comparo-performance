@@ -42,6 +42,16 @@ use Illuminate\Support\Facades\DB;
  * - otherwise nothing is published (`not_linked`).
  * Then {@see ReconcileMissingListings} and {@see RecheckProductAnomalies} for
  * every product the run touched.
+ *
+ * The `held` deactivation deliberately overlaps Matching\Actions\ComplianceHolds,
+ * which hides the offer when a hold decision is WRITTEN (in this run's
+ * matching stage, or by a manual decision outside any run). This stage also
+ * covers a hold that is REUSED unchanged (MatchListing writes nothing then)
+ * while its offer was re-activated outside PublishOffer — the prototype demo
+ * importer or a direct write — so a blocked product never keeps a live offer
+ * past a publishing run (invariant 2). It is a no-op (one indexed read) when
+ * the offer is already hidden. Verified: disabling ComplianceHolds' deactivation
+ * breaks MatchListingTest; this one is defence in depth for those paths.
  */
 final class PublishFeedRun implements ShouldQueue
 {

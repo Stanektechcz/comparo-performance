@@ -209,6 +209,14 @@ it('keeps the Phase 1 append-only triggers on price_snapshots working', function
         ->and(phase2IndexDefinition('price_snapshots_feed_run_id_index'))->not->toBeNull();
 });
 
+it('indexes the active offers of a product per currency for the anomaly median', function () {
+    expect(phase2IndexDefinition('offers_product_currency_active_index'))
+        ->toContain('product_id')
+        ->toContain('currency')
+        ->toContain('WHERE')
+        ->toContain('is_active');
+});
+
 it('keeps the partial indexes the Phase 2 migrations could have rebuilt', function () {
     expect(phase2IndexDefinition('offers_product_active_index'))->toContain('WHERE')->toContain('is_active')
         ->and(phase2IndexDefinition('merchant_products_review_queue'))->toContain('WHERE')->toContain('match_status')

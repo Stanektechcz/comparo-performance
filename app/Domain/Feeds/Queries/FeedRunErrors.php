@@ -9,6 +9,7 @@ use App\Models\FeedRun;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\LazyCollection;
 
 /**
  * The structured errors of one merchant's run: grouped by code (fatal first,
@@ -74,6 +75,23 @@ final class FeedRunErrors
             ->orderBy('row_number')
             ->orderBy('id')
             ->paginate($perPage);
+    }
+
+    /**
+     * Every stored error of a run the caller already resolved through a
+     * merchant-scoped query, in row order, with the item's SKU, read lazily
+     * in chunks (bounded memory for exports).
+     *
+     * @return LazyCollection<int, FeedError>
+     */
+    public function cursor(FeedRun $run, int $chunk = 500): LazyCollection
+    {
+        return FeedError::query()
+            ->where('feed_run_id', $run->id)
+            ->with('item:id,merchant_sku')
+            ->orderBy('row_number')
+            ->orderBy('id')
+            ->lazy(max(1, $chunk));
     }
 
     /**

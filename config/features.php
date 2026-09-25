@@ -8,8 +8,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Config-backed wrapper: App\Domain\Platform\Features\FeatureFlags is the
-    | only place that reads these keys. Default is on for every flag; flip
-    | the env var to disable without a deploy.
+    | only place that reads these keys. Every flag below defaults to on
+    | explicitly; flip the env var to disable without a deploy. A flag with
+    | no key here is OFF (the service fails closed), so a new Feature case
+    | needs its entry.
     |
     */
 

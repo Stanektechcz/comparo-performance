@@ -7,6 +7,7 @@ use App\Domain\Matching\Queries\CandidateProducts;
 use App\Domain\Matching\Queries\MatchingCatalogue;
 use App\Domain\Platform\PrototypeImport\PrototypeSnapshotImporter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\PrototypeFixtures;
 
 /**
@@ -71,4 +72,22 @@ it('narrows the candidate set below the full catalogue', function () {
     );
 
     expect(max($sizes))->toBeLessThan($total);
+});
+
+it('serves the same candidates from a chunk prefetch as from per-item queries, without per-item queries', function () {
+    $facts = array_map(PrototypeFixtures::feedItemFacts(...), PrototypeFixtures::seed()['feedItems']);
+    $perItem = app(CandidateProducts::class);
+    $expected = array_map(static fn ($item): array => array_map(static fn ($candidate): int => $candidate->productId, $perItem->for($item)), $facts);
+    $primed = app(CandidateProducts::class);
+    $primed->prime($facts);
+    $queries = 0;
+    DB::listen(function () use (&$queries): void {
+        $queries++;
+    });
+
+    $actual = array_map(static fn ($item): array => array_map(static fn ($candidate): int => $candidate->productId, $primed->for($item)), $facts);
+
+    expect($primed)->not->toBe($perItem)
+        ->and($actual)->toBe($expected)
+        ->and($queries)->toBe(0);
 });

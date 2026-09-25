@@ -19,19 +19,18 @@ final class MarketResolver
      */
     public function all(): array
     {
+        // Plain arrays in the cache (no serialized objects); built through the one Country → market mapping.
         /** @var list<array{id: int, code: string, name: string, currency: string, locale: string}> $rows */
         $rows = Cache::remember(CacheKeys::markets(), self::TTL_SECONDS, static fn (): array => Country::query()
             ->with('currency')
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
-            ->map(static fn (Country $country): array => [
-                'id' => $country->id,
-                'code' => $country->code,
-                'name' => $country->name,
-                'currency' => $country->currency->code,
-                'locale' => $country->default_locale.'-'.$country->code,
-            ])
+            ->map(static function (Country $country): array {
+                $market = MarketContext::fromCountry($country);
+
+                return ['id' => $country->id, ...$market->toArray()];
+            })
             ->all());
 
         $markets = [];

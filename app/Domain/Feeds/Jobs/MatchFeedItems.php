@@ -42,6 +42,9 @@ use Illuminate\Support\Facades\DB;
  * matches it for the feed's market (compliance hold = products blocked there).
  * The item records the listing, the match status and score. The match metrics
  * are recomputed from the items at the end, so retries never double count.
+ * Per chunk, every listing is upserted first, then the chunk's candidates are
+ * prefetched at once ({@see MatchListing::prime()}) and the listings matched,
+ * so candidate lookups cost a few queries per chunk, not per item.
  * The next stage (PublishFeedRun) moves the run to `publishing`.
  */
 final class MatchFeedItems implements ShouldQueue
@@ -85,9 +88,7 @@ final class MatchFeedItems implements ShouldQueue
             ->where('match_status', FeedItemMatchStatus::Pending->value)
             ->whereIn('validation_status', [FeedItemValidationStatus::Valid->value, FeedItemValidationStatus::Warning->value])
             ->chunkById(max(1, (int) config('comparo.feeds.pipeline_chunk', 200)), function (Collection $items) use ($run, $upsert, $match, $hold, $observedAt): void {
-                foreach ($items as $item) {
-                    $this->process($item, $run, $upsert, $match, $hold, $observedAt);
-                }
+                $this->processChunk($items, $run, $upsert, $match, $hold, $observedAt);
             });
 
         FeedRun::query()->whereKey($run->id)->where('status', FeedRunStatus::Matching->value)->toBase()->update($this->metrics($run->id));
@@ -102,17 +103,38 @@ final class MatchFeedItems implements ShouldQueue
         };
     }
 
-    private function process(FeedItem $item, FeedRun $run, UpsertListing $upsert, MatchListing $match, ComplianceHoldCheck $hold, DateTimeImmutable $observedAt): void
+    /**
+     * @param  Collection<int, FeedItem>  $items
+     */
+    private function processChunk(Collection $items, FeedRun $run, UpsertListing $upsert, MatchListing $match, ComplianceHoldCheck $hold, DateTimeImmutable $observedAt): void
     {
-        try {
-            $listing = $upsert->handle(FeedItemListing::observation($item, $run, $observedAt))->listing;
-        } catch (SkuOwnedByOtherSource) {
-            $this->rejectForeignSku($item);
+        /** @var array<int, int> $listingIds feed item id => listing id */
+        $listingIds = [];
 
-            return;
+        foreach ($items as $item) {
+            try {
+                $listingIds[$item->id] = $upsert->handle(FeedItemListing::observation($item, $run, $observedAt))->listing->id;
+            } catch (SkuOwnedByOtherSource) {
+                $this->rejectForeignSku($item);
+            }
         }
 
-        $outcome = $match->handle(MerchantProduct::query()->findOrFail($listing->id), new MatchContext($run->id, $hold, $observedAt));
+        $listings = MerchantProduct::query()->whereKey(array_values($listingIds))->get()->keyBy('id');
+        $match->prime(array_values($listings->all()));
+        $context = new MatchContext($run->id, $hold, $observedAt);
+
+        foreach ($items as $item) {
+            $listing = isset($listingIds[$item->id]) ? $listings->get($listingIds[$item->id]) : null;
+
+            if ($listing !== null) {
+                $this->match($item, $listing, $match, $context);
+            }
+        }
+    }
+
+    private function match(FeedItem $item, MerchantProduct $listing, MatchListing $match, MatchContext $context): void
+    {
+        $outcome = $match->handle($listing, $context);
 
         $item->forceFill([
             'merchant_product_id' => $listing->id,
