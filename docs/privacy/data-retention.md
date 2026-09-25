@@ -16,6 +16,9 @@ operator-adjustable without a code change.
 | `matching_conflicts` / `matching_conflict_values` | Not pruned | Staff review queue history | resolved/dismissed rows stay for audit; no purge job | default (D-09 pending) |
 | `product_candidates` / `product_candidate_sources` | Not pruned | New-product proposal history | rejected/merged rows stay; no purge job | default (D-09 pending) |
 | `feed_sources.credentials` | Lives as long as the source | Needed to run the feed | overwritten on rotation; deleting the source removes the row (cascades) | Accepted (encrypted cast, hidden, redacted in audit logs) |
+| `search_queries` (search analytics) | Raw rows 13 months (`comparo.search.analytics.raw_retention_months`); `session_hash` nulled after 90 days (`comparo.search.analytics.session_hash_days`) | Search quality, zero-result demand and click attribution (A-24) | `comparo:search:prune-analytics` (daily 00:50 UTC) nulls `session_hash`, then deletes expired rows with their clicks. Never stored: IP address, user id, user agent, raw session id, raw query. Stored query = folded, whitespace-collapsed, capped at 100 chars, with e-mails, phone-like numbers and other 7+ digit runs redacted (8/12/13/14-digit EAN/GTIN runs kept); `session_hash` = HMAC-SHA256(session id, daily secret derived from APP_KEY + UTC date), so it rotates daily; `is_bot` from a conservative user-agent list | default (D-09 pending, DPO sign-off A-24) |
+| `search_clicks` | Deleted with their search (13 months) | Result-click attribution | deleted by `comparo:search:prune-analytics` together with the search row (and by FK cascade). Holds only search id, entity type/id, position, time; accepted only for a same-session search ≤ 30 min old that listed the entity at that position | default (D-09 pending) |
+| `search_demand_daily` | Not pruned | Aggregated demand per day, market and redacted query (non-bot search-page rows only); no session hashes or identifiers | read through `SearchDemandReport::topQueries`, which exposes a query only when ≥ 3 sessions (summed daily-distinct sessions) searched it; storage keeps every aggregate | default (D-09 pending) |
 
 ## Notes
 
@@ -26,4 +29,9 @@ operator-adjustable without a code change.
   category: their *retention* is still open under D-09, but their *append-only-ness* (no update, no
   delete, ever) is an accepted architectural decision independent of how long rows are eventually kept.
 - No entity in this table is deleted synchronously from a user-facing action; all pruning is scheduled
-  (`Feeds\Console\PruneFeedData`) or has no purge job yet.
+  (`Feeds\Console\PruneFeedData`, `Search\Analytics\PruneSearchAnalytics`) or has no purge job yet.
+- Search analytics config keys (`comparo.search.analytics.session_hash_days`, `raw_retention_months`,
+  `click_window_minutes`, `min_demand_sessions`) fall back to the defaults in
+  `App\Domain\Search\Analytics\AnalyticsSettings` (90 days, 13 months, 30 minutes, 3 sessions) until they are
+  added to `config/comparo.php`. Recent searches shown on the search page live only in the visitor's
+  browser (`localStorage`) and are never sent to the server.

@@ -46,4 +46,14 @@ final class CacheKeys
     {
         return "priceStats:{$productId}:{$market}";
     }
+
+    /**
+     * Presented header suggestions for one market and one normalised (folded,
+     * trimmed) prefix. The prefix is hashed so any visitor input yields a
+     * short, safe key; `format` changes whenever the presented shape does.
+     */
+    public static function searchSuggest(string $market, string $normalizedPrefix, int $limit, string $format): string
+    {
+        return "search:suggest:{$format}:{$market}:{$limit}:".hash('sha256', $normalizedPrefix);
+    }
 }

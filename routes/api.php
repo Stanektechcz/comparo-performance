@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Merchant\OfferController as MerchantOfferController;
 use App\Http\Controllers\Api\PublicV1\ProductOffersController;
+use App\Http\Controllers\Search\SuggestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +16,11 @@ Route::get('/user', static fn (Request $request): array => $request->user()->onl
 */
 Route::prefix('public/v1')->name('api.public.v1.')->middleware('throttle:public-api')->group(function (): void {
     Route::get('products/{slug}/offers', ProductOffersController::class)->name('products.offers');
+    // Header suggestions: their own, higher per-IP limit (docs/architecture/phase-3-search.md §4).
+    Route::get('search/suggest', SuggestController::class)
+        ->withoutMiddleware('throttle:public-api')
+        ->middleware('throttle:search-suggest')
+        ->name('search.suggest');
 });
 
 /*
