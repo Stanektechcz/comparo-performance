@@ -221,6 +221,7 @@ it('hides the offer of a SKU missing from two published runs and reactivates it 
 });
 
 it('holds a mass removal back and finishes with warnings', function () {
+    config(['comparo.feeds.mass_removal_min_offers' => 1]);
     runCatalogueFeed($this->source, [
         catalogueRow($this->whey, 'PEA-186', '40.54'),
         catalogueRow($this->creatine, 'PEA-210', '27.90'),
@@ -404,4 +405,19 @@ it('rechecks price anomalies of the touched products: flags a too-low offer and 
         ->and($stale->refresh()->anomaly)->toBeNull()
         ->and($stale->anomaly_reference_minor)->toBeNull()
         ->and($untouched->refresh()->anomaly)->toBeNull();
+});
+
+it('lets a small feed below the guard minimum drop a SKU without holding the removal', function () {
+    runCatalogueFeed($this->source, [
+        catalogueRow($this->whey, 'PEA-186', '40.54'),
+        catalogueRow($this->creatine, 'PEA-210', '27.90'),
+    ]);
+    runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.50')]);
+
+    $run = runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.40')]);
+
+    expect($run->outcome)->toBe(FeedRunOutcome::PublishedWithWarnings) // seed EAN warnings only (A-07)
+        ->and($run->offers_deactivated)->toBe(1)
+        ->and(FeedError::query()->where('feed_run_id', $run->id)->where('code', 'MASS_REMOVAL_HELD')->exists())->toBeFalse()
+        ->and(offerOf(listingOf($this->source, 'PEA-210'))?->is_active)->toBeFalse();
 });

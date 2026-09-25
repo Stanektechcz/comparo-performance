@@ -66,6 +66,8 @@ return [
         'missing_runs_before_deactivation' => 2,
         'unseen_days_before_deactivation' => 7,
         'mass_removal_ratio' => 0.5,
+        // Sources with fewer live offers than this are exempt from the mass-removal guard.
+        'mass_removal_min_offers' => 10,
         // A-11: an unchanged payload re-confirms last_seen_at / source_updated_at.
         'unchanged_refreshes_freshness' => (bool) env('COMPARO_FEEDS_UNCHANGED_REFRESHES_FRESHNESS', true),
         // feed_errors rows stored per run and code; run metrics keep the true totals.

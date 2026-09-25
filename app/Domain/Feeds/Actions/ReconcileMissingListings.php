@@ -31,6 +31,8 @@ use Illuminate\Support\Facades\DB;
  * 3. Mass-removal guard: when that would hide more than `mass_removal_ratio`
  *    of the source's live offers, nothing is hidden; the run gets one
  *    MASS_REMOVAL_HELD warning (and so finishes `published_with_warnings`).
+ *    Sources with fewer than `mass_removal_min_offers` live offers are exempt,
+ *    otherwise a one- or two-SKU feed could never drop a product.
  */
 final class ReconcileMissingListings
 {
@@ -50,8 +52,9 @@ final class ReconcileMissingListings
 
         $liveOffers = $this->liveOffersOfSource($run->feed_source_id)->count();
         $ratio = (float) config('comparo.feeds.mass_removal_ratio', 0.5);
+        $guardFrom = max(1, (int) config('comparo.feeds.mass_removal_min_offers', 10));
 
-        if (count($candidates) > $ratio * $liveOffers) {
+        if ($liveOffers >= $guardFrom && count($candidates) > $ratio * $liveOffers) {
             $this->holdMassRemoval($run, count($candidates), $ratio);
 
             return new ReconcileResult(0, true, []);
