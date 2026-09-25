@@ -60,3 +60,6 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | F-12 | MINOR | Product variant and ingredient_product link changes do not enqueue search re-indexing | add hooks when catalogue editing arrives (Phase 8) |
 | F-13 | MINOR | Every offer publish now also writes one outbox row (extra DB work per feed item) | batch outbox writes per publish chunk (Phase 16 performance) |
 | F-14 | MINOR | The queued full re-index does not remove orphaned documents (the swap rebuild does) | orphan sweep in the full re-index job |
+| F-15 | MAJOR (perf) | Cold-cache product cards cost ~8–10 queries per product (offers + nested relations, history median, completeness) — a 20-hit search page after an invalidation can issue 150–200 queries | bulk prefetch of offers/relations for a whole results page (Phase 16; load-test cold cache first) |
+| F-16 | MINOR (privacy) | Search demand k-threshold sums daily sessions (hashes rotate daily), which is weaker than distinct sessions over the window | DPO sign-off with A-24/D-09 |
+| F-17 | MINOR | Indexing cost is products × active markets comparisons; outbox batch and reindex chunk sizes need load-testing before many markets go live | Phase 16 |
