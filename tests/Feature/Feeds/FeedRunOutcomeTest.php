@@ -69,7 +69,7 @@ it('does nothing when failing or completing a run that already finished', functi
     $run = FeedRun::factory()->completed()->create();
 
     expect(app(FailFeedRun::class)->handle($run->id, FeedErrorCode::Stalled))->toBeFalse()
-        ->and(app(CompleteFeedRun::class)->handle($run->id, FeedRunOutcome::Published, FeedRunStatus::Normalizing))->toBeFalse()
+        ->and(app(CompleteFeedRun::class)->handle($run->id, FeedRunOutcome::Published, FeedRunStatus::Publishing))->toBeFalse()
         ->and($run->refresh()->status)->toBe(FeedRunStatus::Completed)
         ->and($run->failure_code)->toBeNull();
     Event::assertNothingDispatched();
@@ -77,9 +77,9 @@ it('does nothing when failing or completing a run that already finished', functi
 
 it('recovers an erroring source on a successful run and resets its failure streak', function () {
     $source = FeedSource::factory()->erroring()->create();
-    $run = FeedRun::factory()->forSource($source)->running(FeedRunStatus::Normalizing)->create(['checksum' => str_repeat('c', 64)]);
+    $run = FeedRun::factory()->forSource($source)->running(FeedRunStatus::Publishing)->create(['checksum' => str_repeat('c', 64)]);
 
-    app(CompleteFeedRun::class)->handle($run->id, FeedRunOutcome::Published, FeedRunStatus::Normalizing);
+    app(CompleteFeedRun::class)->handle($run->id, FeedRunOutcome::Published, FeedRunStatus::Publishing);
 
     expect($source->refresh()->status)->toBe(FeedSourceStatus::Active)
         ->and($source->consecutive_failures)->toBe(0)

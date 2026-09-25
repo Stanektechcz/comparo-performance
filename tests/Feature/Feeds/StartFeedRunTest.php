@@ -8,7 +8,9 @@ use App\Domain\Feeds\FeedRunStatus;
 use App\Domain\Feeds\FeedRunTrigger;
 use App\Domain\Feeds\Jobs\FetchFeedPayload;
 use App\Domain\Feeds\Jobs\FinalizeFeedRun;
+use App\Domain\Feeds\Jobs\MatchFeedItems;
 use App\Domain\Feeds\Jobs\ParseFeedPayload;
+use App\Domain\Feeds\Jobs\PublishFeedRun;
 use App\Domain\Platform\Audit\AuditAction;
 use App\Models\AuditLog;
 use App\Models\FeedMapping;
@@ -41,7 +43,7 @@ it('queues a run pinned to the current mapping, the active policy and the caller
         ->and($run->triggered_by_user_id)->toBe($this->user->id)
         ->and($run->idempotency_key)->toStartWith('manual:');
 
-    Bus::assertChained([FetchFeedPayload::class, ParseFeedPayload::class, FinalizeFeedRun::class]);
+    Bus::assertChained([FetchFeedPayload::class, ParseFeedPayload::class, MatchFeedItems::class, PublishFeedRun::class, FinalizeFeedRun::class]);
 
     $audit = AuditLog::query()->where('action', AuditAction::FeedRunStartedManually->value)->sole();
     expect($audit->auditable_id)->toBe($run->id)

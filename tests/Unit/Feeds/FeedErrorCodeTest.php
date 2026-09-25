@@ -25,6 +25,7 @@ it('classifies every code by the §3 taxonomy', function () {
         'INVALID_URL', 'DUPLICATE_SKU', 'SKU_OWNED_BY_OTHER_SOURCE', 'FIELD_TOO_LONG', 'IMPOSSIBLE_DISCOUNT',
     ])->and($bySeverity[FeedIssueSeverity::Warning->value])->toBe([
         'INVALID_GTIN', 'MISSING_GTIN', 'UNKNOWN_BRAND', 'INVALID_STOCK', 'INVALID_IMAGE_URL', 'URL_DOMAIN_MISMATCH',
+        'MASS_REMOVAL_HELD',
     ])->and(FeedErrorCode::AuthFailed->isRunFatal())->toBeTrue()
         ->and(FeedErrorCode::DuplicateSku->rejectsRow())->toBeTrue()
         ->and(FeedErrorCode::InvalidGtin->rejectsRow())->toBeFalse();

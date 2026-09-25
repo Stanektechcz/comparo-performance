@@ -8,7 +8,9 @@ use App\Domain\Feeds\FeedErrorCode;
 use App\Domain\Feeds\FeedRunStatus;
 use App\Domain\Feeds\Jobs\FetchFeedPayload;
 use App\Domain\Feeds\Jobs\FinalizeFeedRun;
+use App\Domain\Feeds\Jobs\MatchFeedItems;
 use App\Domain\Feeds\Jobs\ParseFeedPayload;
+use App\Domain\Feeds\Jobs\PublishFeedRun;
 use App\Models\FeedRun;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Bus;
@@ -41,12 +43,9 @@ final class FeedRunPipeline
     }
 
     /**
-     * The ordered stages. P2-11b inserts its stages here, before finalisation,
-     * and lets FinalizeFeedRun complete from `publishing`:
-     *
-     *     new MatchFeedItems($run->id),   // normalizing → matching → (publishing)
-     *     new PublishFeedRun($run->id),   // publishing, reconciliation
-     *     new FinalizeFeedRun($run->id, completeFrom: FeedRunStatus::Publishing),
+     * The ordered stages: fetch (queued → fetching → parsing) → parse and
+     * normalise (→ normalizing) → match (→ matching) → publish and reconcile
+     * (→ publishing) → finalise (→ completed).
      *
      * @return list<ShouldQueue>
      */
@@ -55,7 +54,9 @@ final class FeedRunPipeline
         return [
             new FetchFeedPayload($run->id, $run->feed_source_id),
             new ParseFeedPayload($run->id),
-            new FinalizeFeedRun($run->id, completeFrom: FeedRunStatus::Normalizing),
+            new MatchFeedItems($run->id),
+            new PublishFeedRun($run->id),
+            new FinalizeFeedRun($run->id, completeFrom: FeedRunStatus::Publishing),
         ];
     }
 

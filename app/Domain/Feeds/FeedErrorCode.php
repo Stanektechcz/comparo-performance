@@ -52,6 +52,8 @@ enum FeedErrorCode: string
     case InvalidStock = 'INVALID_STOCK';
     case InvalidImageUrl = 'INVALID_IMAGE_URL';
     case UrlDomainMismatch = 'URL_DOMAIN_MISMATCH';
+    /** Run-level: reconciliation would hide too many listings at once, so it hid none. */
+    case MassRemovalHeld = 'MASS_REMOVAL_HELD';
 
     public function severity(): FeedIssueSeverity
     {
@@ -88,7 +90,8 @@ enum FeedErrorCode: string
             self::UnknownBrand,
             self::InvalidStock,
             self::InvalidImageUrl,
-            self::UrlDomainMismatch => FeedIssueSeverity::Warning,
+            self::UrlDomainMismatch,
+            self::MassRemovalHeld => FeedIssueSeverity::Warning,
         };
     }
 
@@ -135,6 +138,7 @@ enum FeedErrorCode: string
             self::ImpossibleDiscount => ['percent'],
             self::UnknownBrand => ['brand'],
             self::UrlDomainMismatch => ['host', 'domain'],
+            self::MassRemovalHeld => ['count', 'percent'],
             default => [],
         };
     }

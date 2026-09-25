@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Domain\Feeds\Fetching\DnsHostResolver;
 use App\Domain\Feeds\Fetching\FeedFetcher;
 use App\Domain\Feeds\Fetching\HostResolver;
+use App\Domain\Feeds\Listeners\PublishLatestObservation;
+use App\Domain\Matching\Events\ProductMatched;
 use App\Domain\Offers\Events\OfferDeactivated;
 use App\Domain\Offers\Events\OfferPublished;
 use App\Domain\Offers\Events\OfferRelinked;
@@ -157,5 +159,8 @@ class AppServiceProvider extends ServiceProvider
         foreach ([OfferPublished::class, OfferDeactivated::class, OfferRelinked::class, PriceChanged::class] as $event) {
             Event::listen($event, BumpProductCacheVersion::class);
         }
+
+        // A listing linked outside a feed run publishes its latest feed observation.
+        Event::listen(ProductMatched::class, PublishLatestObservation::class);
     }
 }

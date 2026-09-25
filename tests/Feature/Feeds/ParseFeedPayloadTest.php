@@ -8,7 +8,9 @@ use App\Domain\Feeds\FeedItemValidationStatus;
 use App\Domain\Feeds\FeedRunOutcome;
 use App\Domain\Feeds\FeedRunStatus;
 use App\Domain\Feeds\Jobs\FinalizeFeedRun;
+use App\Domain\Feeds\Jobs\MatchFeedItems;
 use App\Domain\Feeds\Jobs\ParseFeedPayload;
+use App\Domain\Feeds\Jobs\PublishFeedRun;
 use App\Models\FeedError;
 use App\Models\FeedItem;
 use App\Models\FeedMapping;
@@ -102,7 +104,9 @@ it('publishes with warnings when the rejected share stays under the threshold', 
         ->and($run->parsed_at)->not->toBeNull()
         ->and($run->warnings)->toBe(4);
 
-    FinalizeFeedRun::dispatchSync($run->id, FeedRunStatus::Normalizing);
+    MatchFeedItems::dispatchSync($run->id);
+    PublishFeedRun::dispatchSync($run->id);
+    FinalizeFeedRun::dispatchSync($run->id, FeedRunStatus::Publishing);
 
     expect($run->refresh()->status)->toBe(FeedRunStatus::Completed)
         ->and($run->outcome)->toBe(FeedRunOutcome::PublishedWithWarnings);

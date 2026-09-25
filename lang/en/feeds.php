@@ -50,6 +50,7 @@ return [
         'INVALID_STOCK' => 'The stock quantity ":value" is not a whole number, so it was ignored. The product was imported with its availability only.',
         'INVALID_IMAGE_URL' => 'The image link is not a valid http:// or https:// address, so it was ignored. The product was imported without an image.',
         'URL_DOMAIN_MISMATCH' => 'The product link points to :host, which is not your shop domain :domain. The product was imported; please link to your own shop.',
+        'MASS_REMOVAL_HELD' => 'This import would have hidden :count of your live offers at once (more than :percent% of this feed), so none were hidden. Check that the export still contains all your products; if you removed them on purpose, contact Comparo support to confirm the removal.',
     ],
 
     'fields' => [

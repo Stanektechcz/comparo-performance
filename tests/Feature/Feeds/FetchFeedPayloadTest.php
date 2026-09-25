@@ -97,7 +97,8 @@ it('imports a URL feed end to end and activates the draft source', function () {
     expect($items->pluck('merchant_sku')->all())->toBe(['PEA-186', 'PEA-190', 'PEA-210'])
         ->and($items->pluck('price_minor')->all())->toBe([4054, 3290, 2790])
         ->and($items->every(fn (FeedItem $item) => $item->validation_status === FeedItemValidationStatus::Valid
-            && $item->match_status === FeedItemMatchStatus::Pending
+            && $item->match_status === FeedItemMatchStatus::Unmatched
+            && $item->diff_action === 'not_linked'
             && $item->raw_payload === null))->toBeTrue();
 
     $http->assertSentCount(1);

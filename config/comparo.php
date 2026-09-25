@@ -79,6 +79,8 @@ return [
         'manual_run_cooldown_minutes' => 15,
         'consecutive_failures_before_error' => 3,
         'preview_rows' => 20,
+        // Items per transaction in the match and publish stages.
+        'pipeline_chunk' => 200,
         // Minutes a run may stay in one stage before the reaper fails it as STALLED.
         // fetching covers 3 attempts × 300 s timeout plus the 60/300/900 s backoff.
         'stage_deadlines_minutes' => [

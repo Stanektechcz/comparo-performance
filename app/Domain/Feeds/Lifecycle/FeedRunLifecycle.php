@@ -18,16 +18,13 @@ final class FeedRunLifecycle
     /**
      * Forward edges of the pipeline.
      *
-     * `normalizing → completed` is an interim edge of P2-11a, whose pipeline has
-     * no match/publish stage yet; P2-11b removes it when it inserts those stages.
-     *
      * @var array<string, list<FeedRunStatus>>
      */
     private const array FORWARD = [
         'queued' => [FeedRunStatus::Fetching],
         'fetching' => [FeedRunStatus::Parsing, FeedRunStatus::Completed],
         'parsing' => [FeedRunStatus::Normalizing],
-        'normalizing' => [FeedRunStatus::Matching, FeedRunStatus::Completed],
+        'normalizing' => [FeedRunStatus::Matching],
         'matching' => [FeedRunStatus::Publishing],
         'publishing' => [FeedRunStatus::Completed],
     ];
