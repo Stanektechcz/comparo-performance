@@ -25,6 +25,7 @@ acceptance; a changed decision gets a new ADR that supersedes the old one.
 | [0015](0015-domain-events-feature-flags-merchant-context.md) | Domain events, feature flags and merchant context | Accepted | Phase 2 (functional) |
 | [0016](0016-search-and-discovery.md) | Search and discovery | Accepted | Phase 3 (functional; local-engine relevance parity verified) |
 | [0017](0017-multi-currency-comparison.md) | Multi-currency total-price comparison | Accepted | Phase 3 (functional; single-currency paths parity verified) |
+| [0018](0018-business-decisions-baseline.md) | Business decisions baseline (D-01…D-29) | Accepted | Decisions only; planned config/flags applied per phase; legal/DPO/tax sign-off pending before production |
 
 ## Template
 
