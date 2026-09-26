@@ -108,7 +108,7 @@ composer run dev          # app server, queue listener, logs and Vite (php artis
 |---|---|
 | Production asset build | `npm run build` |
 | SSR bundle | `npm run build:ssr`, then `php artisan inertia:start-ssr` |
-| Queue worker (Windows / no Horizon) | `php artisan queue:work --queue=critical,default` |
+| Queue worker (Windows / no Horizon) | `php artisan queue:work --queue=default,feed-import,matching,pricing,search,analytics` |
 | Horizon (Linux, WSL, Docker only) | `php artisan horizon` → `/staff/horizon` (permission `staff.horizon.view`) |
 
 ## 6. Tests and quality gates

@@ -4,17 +4,18 @@ Phased port of the Comparo Performance prototype to the Laravel 13 modular monol
 ([target-laravel-architecture.md](target-laravel-architecture.md)). Each phase is a vertical slice that
 ends in working, tested software; later phases only add.
 
-Status as of 2026-09-25: **Phase 0 and Phase 1 in progress. Phases 2–13 not started.**
+Status as of 2026-09-26: **Phases 0–3 DONE (Gate C on each). Phase 4 IN PROGRESS (wave 1 landed:
+schema + pure engines with parity + platform foundations). Phases 5–13 not started.**
 
 ## Overview
 
 | Phase | Name | Main contexts | Status |
 |---|---|---|---|
-| 0 | Foundation | Platform, Accounts, tooling | IN PROGRESS |
-| 1 | Catalogue, offers, landed price, compliance, ranking — product page | Catalog, Merchants, Offers, Pricing, Compliance | IN PROGRESS |
-| 2 | Feeds and matching | Feeds, Matching | NOT STARTED (next slice) |
-| 3 | Search | Search | NOT STARTED |
-| 4 | Reviews, purchase verification, orders | Reviews | NOT STARTED |
+| 0 | Foundation | Platform, Accounts, tooling | DONE |
+| 1 | Catalogue, offers, landed price, compliance, ranking — product page | Catalog, Merchants, Offers, Pricing, Compliance | DONE |
+| 2 | Feeds and matching | Feeds, Matching | DONE |
+| 3 | Search | Search | DONE |
+| 4 | Reviews, purchase verification, orders | Reviews | IN PROGRESS (next slice) |
 | 5 | Affiliate redirect and conversions | Affiliate | NOT STARTED |
 | 6 | Accounts: saves, alerts, notifications | Engagement | NOT STARTED |
 | 7 | Merchant portal | Merchants, Feeds, Offers | NOT STARTED |
@@ -43,7 +44,7 @@ Status as of 2026-09-25: **Phase 0 and Phase 1 in progress. Phases 2–13 not st
 | Correlation-id middleware | done (prepended globally in `bootstrap/app.php`) |
 | Horizon gate on `staff.horizon.view` | done (`HorizonServiceProvider`) |
 | JSON log channel | pending |
-| CI: PostgreSQL job, `export-fixtures.mjs --check`, architecture tests | pending |
+| CI: PostgreSQL job, `export-fixtures.mjs --check`, architecture tests | done (`.github/workflows/tests.yml`; ran green on PR #1) |
 
 **Exit criteria**
 
@@ -72,7 +73,7 @@ miniature.
 | Compliance applied before presenters (no offers unless visible; purchase URL only if purchasable) | code exists; status × surface test matrix pending |
 | Controllers (`Catalog/*`, `Api/PublicV1/ProductOffersController`, `MarketController`) and presenters (`app/Http/Presenters/*`, incl. `SeoPresenter`) | routes (`routes/web.php`, `routes/api.php`), pages (`resources/js/pages/catalog/*`) and Blade `seo` head rendering exist; end-to-end verification against the demo snapshot pending |
 | Demo importer `PrototypeSnapshotImporter` (time-anchored via `TimeShift`, gated by `DemoEnvironment`) + `Demo*Seeder` incl. demo personas | code exists |
-| Offer comparison cache (`CacheKeys`, `CatalogCacheVersion` version tokens) | code exists; event listeners that bump tokens pending |
+| Offer comparison cache (`CacheKeys`, `CatalogCacheVersion` version tokens) | done — `Platform\Listeners\BumpProductCacheVersion` bumps tokens after commit |
 | Architecture tests for `RankingContext` and layering | exist (`tests/Architecture/*`) |
 
 **Exit criteria**
@@ -88,26 +89,31 @@ miniature.
 
 ---
 
-## Phases 2–13 (NOT STARTED)
+## Phases 2–13
 
-| Phase | Scope | Exit criteria |
-|---|---|---|
-| 2 Feeds and matching | Feed sources, runs, items; parsing (CSV/XML/JSON); normalisation; matching port; manual match queue; offer upsert and snapshots | 10 000-row feed imports < 60 s; `matching.json` parity; unmatched items never create offers; re-import is idempotent |
-| 3 Search | Scout + Meilisearch indexes (products, brands, merchants), synonyms (`kreatin` = `creatine`), suggest, zero-result logging, database driver fallback | Suggest < 80 ms p95; blocked products absent from market-scoped results; index rebuild command |
-| 4 Reviews, verification, orders | `orders`, `purchase_proofs` with moderation queue, click-match verification, credibility weighting (`reviews.json` parity), weighted aggregates | Weighted rating equals prototype; unverified reviews visible with lower weight; no raw verification email stored |
-| 5 Affiliate | `/go/{merchant}/{product}` with Redis click buffer, `FlushClickBuffer`, conversion webhooks, reconciliation | Redirect < 50 ms p95; compliance-blocked/unknown never redirect; webhook HMAC and idempotency tested |
-| 6 Accounts | Saves, lists, follows, alerts with nightly evaluation, notifications, preferences | Alert triggers derived from real totals; no seeded counters |
-| 7 Merchant portal | Feed health, match center, offers, deals, analytics, benchmarks, merchant API tokens | Negative isolation test per endpoint; benchmarks anonymised |
-| 8 Staff consoles | Moderation, compliance matrix and review queue, merchant approval, risk, anomalies, product merge, link health, audit viewer | Every action permission-checked and audited |
-| 9 Community and reputation | Forum, guides, reputation, juries | Single points currency decided (C-31); jury draw reproducible |
-| 10 Commercial | Plans, entitlements, subscriptions, invoices, credit notes, sponsored campaigns, API products/metering; `BillingProvider` with Stripe + manual (ADR-0006) | No Stripe import outside the provider; D-04/D-05 decided before real charges; promotion never alters organic rank |
-| 11 Growth | Opportunity engine over live data, tasks, experiments | Opportunities derived, never stored by hand; seeded analytics removed or labelled (D-16) |
-| 12 Content and SEO | Page registry, metadata, programmatic pages, sitemaps, hreflang for enabled locales, newsletter, research | Sitemaps nightly; JSON-LD obeys compliance; Core Web Vitals targets met |
-| 13 Platform hardening | GDPR export/erase, retention jobs (D-09), partitioning of `price_snapshots`/`affiliate_clicks`, security headers, load tests, **prototype cleanup release** (removal of root prototype files after sign-off) | Performance targets met under load; retention jobs verified; prototype removed only with an explicit release decision |
+| Phase | Scope | Exit criteria | Status |
+|---|---|---|---|
+| 2 Feeds and matching | Feed sources, runs, items; parsing (CSV/XML/JSON); normalisation; matching port; manual match queue; offer upsert and snapshots | 10 000-row feed imports < 60 s; `matching.json` parity; unmatched items never create offers; re-import is idempotent | DONE |
+| 3 Search | Scout + Meilisearch indexes (products, brands, merchants), synonyms (`kreatin` = `creatine`), suggest, zero-result logging, database driver fallback | Suggest < 80 ms p95; blocked products absent from market-scoped results; index rebuild command | DONE |
+| 4 Reviews, verification, orders | `orders`, `purchase_proofs` with moderation queue, click-match verification, credibility weighting (`reviews.json` parity), weighted aggregates | Weighted rating equals prototype; unverified reviews visible with lower weight; no raw verification email stored | IN PROGRESS (schema + pure engines done; domain actions/HTTP/UI pending) |
+| 5 Affiliate | `/go/{merchant}/{product}` with Redis click buffer, `FlushClickBuffer`, conversion webhooks, reconciliation | Redirect < 50 ms p95; compliance-blocked/unknown never redirect; webhook HMAC and idempotency tested | NOT STARTED |
+| 6 Accounts | Saves, lists, follows, alerts with nightly evaluation, notifications, preferences | Alert triggers derived from real totals; no seeded counters | NOT STARTED |
+| 7 Merchant portal | Feed health, match center, offers, deals, analytics, benchmarks, merchant API tokens | Negative isolation test per endpoint; benchmarks anonymised | NOT STARTED |
+| 8 Staff consoles | Moderation, compliance matrix and review queue, merchant approval, risk, anomalies, product merge, link health, audit viewer | Every action permission-checked and audited | NOT STARTED |
+| 9 Community and reputation | Forum, guides, reputation, juries | Single points currency decided (C-31); jury draw reproducible | NOT STARTED |
+| 10 Commercial | Plans, entitlements, subscriptions, invoices, credit notes, sponsored campaigns, API products/metering; `BillingProvider` with Stripe + manual (ADR-0006) | No Stripe import outside the provider; D-04/D-05 decided before real charges; promotion never alters organic rank | NOT STARTED |
+| 11 Growth | Opportunity engine over live data, tasks, experiments | Opportunities derived, never stored by hand; seeded analytics removed or labelled (D-16) | NOT STARTED |
+| 12 Content and SEO | Page registry, metadata, programmatic pages, sitemaps, hreflang for enabled locales, newsletter, research | Sitemaps nightly; JSON-LD obeys compliance; Core Web Vitals targets met | NOT STARTED |
+| 13 Platform hardening | GDPR export/erase, retention jobs (D-09), partitioning of `price_snapshots`/`affiliate_clicks`, security headers, load tests, **prototype cleanup release** (removal of root prototype files after sign-off) | Performance targets met under load; retention jobs verified; prototype removed only with an explicit release decision | NOT STARTED |
 
 ---
 
-## Next vertical slice: Phase 2 — feeds and matching
+## Phase 2 — feeds and matching (DONE; kept for reference)
+
+Superseded as "next slice" — Phase 2 shipped at Gate C (see [`docs/architecture/phase-2-feeds-matching.md`](phase-2-feeds-matching.md)
+and [`TASK-GRAPH.md`](../autonomy/TASK-GRAPH.md)). The current next slice is Phase 4 — reviews,
+verification and orders (see [`phase-4-reviews-orders.md`](phase-4-reviews-orders.md) and
+[`TASK-GRAPH.md`](../autonomy/TASK-GRAPH.md)).
 
 ### Entities
 

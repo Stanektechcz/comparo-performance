@@ -21,4 +21,7 @@ Statuses: `IMPLEMENTABLE_LOCALLY` · `SANDBOX_AVAILABLE` · `CREDENTIAL_REQUIRED
 | CAPTCHA | abuse protection | rate limits + honeypot | OPTIONAL | provider keys if chosen | — |
 | Observability (Sentry / Nightwatch) | error + performance monitoring | log channels | OPTIONAL | account | — |
 | WebSocket transport (Reverb) | live rooms | transport abstraction + polling fallback | IMPLEMENTABLE_LOCALLY | — | D-28 |
-| Git remote + GitHub Actions | CI execution | local gates | CREDENTIAL_REQUIRED | create remote, push | — |
+| Git remote + GitHub Actions | CI execution | remote `Stanektechcz/comparo-performance` (private) + `.github/workflows/tests.yml` (SQLite, PostgreSQL 16 + Meilisearch 1.53.2 service, frontend) | RESOLVED | — | — |
+| Hosted staging server (domain, TLS) | Phase 4+ staging environment (A-39) | `tools/staging/{smoke,local-stack}.mjs` runs the stack locally | CREDENTIAL_REQUIRED | hosting decision + credentials | A-39 |
+| Error tracking vendor | production error/performance monitoring | log channels | CREDENTIAL_REQUIRED | vendor + account approval | — |
+| Mail provider | production transactional email | `log`/`array` mailer locally | CREDENTIAL_REQUIRED | provider + account approval | D-27 |
