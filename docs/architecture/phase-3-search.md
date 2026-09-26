@@ -169,3 +169,12 @@ currency. Existing parity (single-currency markets) must stay byte-identical.
 Hiding blocked products instead of "not available in your market" (A-21, Compliance Lead); D-24 default
 market for crawlers (DE); Meilisearch hosting + keys (CREDENTIAL_REQUIRED); search-log privacy sign-off
 (DPO, D-09); `parseNL` intent labels and the Ask feature deferred (A-27).
+
+## Measured capacity (2026-09-26)
+
+`php artisan comparo:benchmark:search-indexing --products=500 --markets=5` (local SQLite, database engine):
+2 500 product × market comparisons in 11.5 s — **4.6 ms per comparison**, **~1 014 queries per 25-product
+chunk** (~0.55 s). Extrapolated to 27 active markets: ~3.1 s per 25-product chunk, so the 40 s working
+budget of `ProcessSearchOutbox` covers ~300 products per run; `product_batch` 25 stays appropriate. Remote
+PostgreSQL adds network latency per query — re-measure on the production database before activating many
+markets. Follow-up F-18: reuse the bulk comparison path to cut the per-comparison queries.
