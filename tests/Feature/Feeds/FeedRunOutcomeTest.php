@@ -43,8 +43,8 @@ it('moves an active source to error after the third consecutive failure', functi
         ->and($source->next_run_at)->toBeNull()
         ->and($run->refresh()->failure_reason)->toBe(__('feeds.errors.FETCH_TIMEOUT', ['seconds' => 120]))
         ->and($run->errors)->toBe(1)
-        ->and(AuditLog::query()->where('action', AuditAction::FeedSourceStatusChanged->value)->sole()->after)
-        ->toMatchArray(['status' => 'error', 'reason' => 'FETCH_TIMEOUT', '_actor_component' => 'feeds.pipeline']);
+        ->and(AuditLog::query()->where('action', AuditAction::FeedSourceStatusChanged->value)->sole()->only(['after', 'actor_component']))
+        ->toMatchArray(['after' => ['status' => 'error', 'reason' => 'FETCH_TIMEOUT'], 'actor_component' => 'feeds.pipeline']);
     Event::assertDispatchedTimes(FeedFailed::class, 2);
 });
 

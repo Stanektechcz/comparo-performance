@@ -29,7 +29,10 @@ use Illuminate\Support\Facades\DB;
  * column has second precision).
  *
  * Callers are after-commit listeners and hooks; every chunk is written in its
- * own transaction. Fan-outs (merchant, brand, category, ingredient, full
+ * own transaction. Enqueues made while {@see PendingOutboxWrites} collects a
+ * transaction's after-commit phase (armed by the indexing hooks, F-13) are
+ * batched and written once that phase ends ({@see self::flushPending()}), so
+ * a publish chunk of N offers costs one outbox write, not N. Fan-outs (merchant, brand, category, ingredient, full
  * reindex) read ids with keyset pagination in `comparo.search.indexing.fan_out_chunk`
  * batches, never loading an unbounded list.
  */
@@ -39,16 +42,62 @@ final class SearchOutbox
 
     public const int DEFAULT_CHUNK = 500;
 
+    public function __construct(private readonly PendingOutboxWrites $pending) {}
+
     /**
      * @param  list<int>  $ids
-     * @return int rows written
+     * @return int rows written (or batched for writing when the current after-commit phase ends)
      */
     public function enqueue(SearchEntityType $entity, array $ids, bool $priority = false): int
     {
         $ids = self::normalize($ids);
 
+        if ($ids === [] || ! $this->pending->isCollecting()) {
+            return $this->write($entity, $ids, $priority);
+        }
+
+        $full = $this->pending->add($entity, $ids, $priority, self::chunk());
+
+        if ($full !== null) {
+            $this->write($entity, self::normalize($full), $priority);
+        }
+
+        return count($ids);
+    }
+
+    /**
+     * Batch the outbox writes of the current transaction's after-commit
+     * phase (a no-op outside a transaction). Called by the indexing hooks.
+     */
+    public function batchUntilCommitted(): void
+    {
+        $this->pending->arm();
+    }
+
+    /**
+     * Writes the batch once the collected after-commit phase has ended
+     * (listener of the connection's committed / rolled-back events).
+     *
+     * @return int rows written
+     */
+    public function flushPending(bool $rolledBack = false): int
+    {
+        $written = 0;
+
+        foreach ($this->pending->finish($rolledBack) as $group) {
+            $written += $this->write($group['entity'], self::normalize($group['ids']), $group['priority']);
+        }
+
+        return $written;
+    }
+
+    /**
+     * @param  list<int>  $ids  normalized
+     */
+    private function write(SearchEntityType $entity, array $ids, bool $priority): int
+    {
         foreach (array_chunk($ids, self::chunk()) as $chunk) {
-            DB::transaction(fn () => $this->write($entity, $chunk, $priority));
+            DB::transaction(fn () => $this->upsertChunk($entity, $chunk, $priority));
         }
 
         if ($priority && $ids !== []) {
@@ -180,7 +229,7 @@ final class SearchOutbox
      *
      * @param  list<int>  $ids
      */
-    private function write(SearchEntityType $entity, array $ids, bool $priority): void
+    private function upsertChunk(SearchEntityType $entity, array $ids, bool $priority): void
     {
         /** @var array<int, string> $existing entity id => stored queued_at */
         $existing = DB::table(self::TABLE)

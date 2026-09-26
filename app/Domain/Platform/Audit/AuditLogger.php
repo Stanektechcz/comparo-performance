@@ -23,12 +23,18 @@ use InvalidArgumentException;
  *   ip_address/user_agent come from hidden Context values. Outside a request
  *   (console, scheduler) they are null; queued jobs inherit the values of the
  *   request that dispatched them, because Laravel propagates Context into jobs.
- * - A system actor's component name is stored in `after` under
- *   {@see self::SYSTEM_COMPONENT_KEY} (audit_logs has no dedicated column).
+ * - A system actor's component name is stored in `actor_component`
+ *   (null for users); `after` holds only the caller's data. Rows written
+ *   before migration 2026_09_26_100100 carry it in `after._actor_component`.
  * - The audit log is pseudonymous: pass ids, never emails or names.
  */
 final class AuditLogger
 {
+    /**
+     * Legacy location of a system actor's component: the `after` key used by
+     * rows written before migration 2026_09_26_100100. New rows never carry
+     * it; read `actor_component` instead (fall back to this key for old rows).
+     */
     public const string SYSTEM_COMPONENT_KEY = '_actor_component';
 
     private const int CORRELATION_ID_MAX = 64;
@@ -50,13 +56,10 @@ final class AuditLogger
         array $before = [],
         array $after = [],
     ): AuditLog {
-        if ($actor->isSystem()) {
-            $after[self::SYSTEM_COMPONENT_KEY] = $actor->component;
-        }
-
         return AuditLog::query()->create([
             'actor_id' => $actor->id,
             'actor_type' => $actor->type,
+            'actor_component' => $actor->isSystem() ? $actor->component : null,
             'action' => $action->value,
             'auditable_type' => $subject?->getMorphClass(),
             'auditable_id' => $subject === null ? null : $this->subjectKey($subject),

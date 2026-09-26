@@ -4,6 +4,7 @@ use App\Domain\Compliance\ComplianceStatus;
 use App\Domain\Feeds\Actions\FeedActor;
 use App\Domain\Feeds\Actions\ReconcileMissingListings;
 use App\Domain\Feeds\Actions\StartFeedRun;
+use App\Domain\Feeds\Events\FeedFailed;
 use App\Domain\Feeds\FeedItemMatchStatus;
 use App\Domain\Feeds\FeedItemValidationStatus;
 use App\Domain\Feeds\FeedRunOutcome;
@@ -358,6 +359,8 @@ it('never creates an offer for a product blocked from the first run', function (
 });
 
 it('rejects a SKU owned by another feed source of the merchant', function () {
+    // One of two rows rejected: 50 %, within a 50 % threshold (F-08 counts it).
+    config(['comparo.feeds.max_rejected_ratio' => 0.5]);
     $other = FeedSource::factory()->for($this->merchant)->create();
     $owned = MerchantProduct::factory()->fromFeed($other)->create(['merchant_sku' => 'PEA-186', 'product_id' => null]);
 
@@ -368,6 +371,34 @@ it('rejects a SKU owned by another feed source of the merchant', function () {
         ->and(FeedItem::query()->where('merchant_sku', 'PEA-186')->sole()->validation_status)->toBe(FeedItemValidationStatus::Invalid)
         ->and($owned->refresh()->feed_source_id)->toBe($other->id)
         ->and(offerOf($owned))->toBeNull();
+});
+
+it('fails the run before publishing when rows rejected during matching exceed the reject threshold', function () {
+    Event::fake([FeedFailed::class]);
+    $other = FeedSource::factory()->for($this->merchant)->create();
+    MerchantProduct::factory()->fromFeed($other)->create(['merchant_sku' => 'PEA-186', 'product_id' => null]);
+
+    $run = runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.54'), catalogueRow($this->creatine, 'PEA-210', '27.90'), catalogueRow($this->concentrate, 'PEA-190', '32.90')]);
+
+    // Parsing saw no invalid row; matching rejected 1 of 3 (33 % > 20 %).
+    expect($run->status)->toBe(FeedRunStatus::Failed)
+        ->and($run->failure_code)->toBe('REJECT_THRESHOLD_EXCEEDED')
+        ->and($run->only(['rows_read', 'rows_valid', 'rows_invalid', 'offers_created']))->toBe(['rows_read' => 3, 'rows_valid' => 2, 'rows_invalid' => 1, 'offers_created' => 0])
+        ->and($run->published_at)->toBeNull()
+        ->and(Offer::query()->whereIn('product_id', [$this->creatine->id, $this->concentrate->id])->exists())->toBeFalse()
+        ->and(FeedError::query()->where('feed_run_id', $run->id)->pluck('code')->all())->toContain('SKU_OWNED_BY_OTHER_SOURCE', 'REJECT_THRESHOLD_EXCEEDED');
+    Event::assertDispatched(FeedFailed::class, fn (FeedFailed $event) => $event->code === 'REJECT_THRESHOLD_EXCEEDED');
+});
+
+it('publishes when the rows rejected during matching stay within the reject threshold', function () {
+    config(['comparo.feeds.max_rejected_ratio' => 0.34]);
+    $other = FeedSource::factory()->for($this->merchant)->create();
+    MerchantProduct::factory()->fromFeed($other)->create(['merchant_sku' => 'PEA-186', 'product_id' => null]);
+
+    $run = runCatalogueFeed($this->source, [catalogueRow($this->whey, 'PEA-186', '40.54'), catalogueRow($this->creatine, 'PEA-210', '27.90'), catalogueRow($this->concentrate, 'PEA-190', '32.90')]);
+
+    expect($run->status)->toBe(FeedRunStatus::Completed)
+        ->and($run->only(['rows_invalid', 'offers_created']))->toBe(['rows_invalid' => 1, 'offers_created' => 2]);
 });
 
 it('creates no duplicates when the match and publish stages run twice', function () {

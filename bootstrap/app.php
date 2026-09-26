@@ -20,7 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->prepend(AssignCorrelationId::class);
+        // Appended to the global stack so it runs AFTER TrustProxies: the client
+        // IP it records for the audit log is then the one resolved through the
+        // trusted proxies (config/trustedproxy.php, TRUSTED_PROXIES; default none).
+        $middleware->append(AssignCorrelationId::class);
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 

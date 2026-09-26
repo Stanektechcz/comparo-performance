@@ -8,9 +8,11 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Country;
 use App\Models\Ingredient;
+use App\Models\IngredientProduct;
 use App\Models\Merchant;
 use App\Models\Offer;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +23,8 @@ use Illuminate\Support\Facades\DB;
  * (`updated` fires only for a real change; `saved` cannot tell a creation
  * from a later update of the same instance): what changed is read from the
  * model when the hook fires; the outbox rows are written after the
- * transaction commits (immediately outside one).
+ * transaction commits (immediately outside one), batched per transaction
+ * ({@see PendingOutboxWrites}).
  *
  * - offer written directly (safety net next to the offer events): its
  *   product(s)
@@ -33,6 +36,13 @@ use Illuminate\Support\Facades\DB;
  * - category: its document; renames and moves also the documents and
  *   products of the category and all its descendants (slug paths)
  * - ingredient: its document; renames also the products listing it
+ * - product variant (created, changed, deleted): the product document
+ *   (variant names are searchable), both products when it moved
+ * - ingredient_product link (attach, pivot update, detach, sync — the
+ *   IngredientProduct pivot fires model events): the product document
+ *   (listed ingredients) and the ingredient document (listed-product count).
+ *   A bulk `detach()` without ids or a raw query fires no event; such a
+ *   write must enqueue the product itself
  * - merchant inputs (coupon, shipping zone, trust signal, risk event): the
  *   merchant document and its products
  * - merchant: by changed column (allow-lists below) — columns that feed the
@@ -78,7 +88,32 @@ final readonly class CatalogIndexTriggers
     {
         $productIds = self::currentAndOriginal($offer, 'product_id');
 
-        self::afterCommit(fn () => $this->outbox->enqueue(SearchEntityType::Product, $productIds));
+        $this->afterCommit(fn () => $this->outbox->enqueue(SearchEntityType::Product, $productIds));
+    }
+
+    /**
+     * A variant was created, changed or deleted: its product, and the
+     * previous product when the variant moved.
+     */
+    public function productVariantChanged(ProductVariant $variant): void
+    {
+        $productIds = self::currentAndOriginal($variant, 'product_id');
+
+        $this->afterCommit(fn () => $this->outbox->enqueue(SearchEntityType::Product, $productIds));
+    }
+
+    /**
+     * An ingredient_product link was attached, updated or detached.
+     */
+    public function ingredientLinkChanged(IngredientProduct $link): void
+    {
+        $productIds = self::currentAndOriginal($link, 'product_id');
+        $ingredientIds = self::currentAndOriginal($link, 'ingredient_id');
+
+        $this->afterCommit(function () use ($productIds, $ingredientIds): void {
+            $this->outbox->enqueue(SearchEntityType::Product, $productIds);
+            $this->outbox->enqueue(SearchEntityType::Ingredient, $ingredientIds);
+        });
     }
 
     public function productDeleted(Product $product): void
@@ -91,7 +126,7 @@ final readonly class CatalogIndexTriggers
         $brandId = $brand->id;
         $renamed = ! $created && $brand->wasChanged(['name', 'slug']);
 
-        self::afterCommit(function () use ($brandId, $renamed): void {
+        $this->afterCommit(function () use ($brandId, $renamed): void {
             $this->outbox->enqueue(SearchEntityType::Brand, [$brandId]);
 
             if ($renamed) {
@@ -110,7 +145,7 @@ final readonly class CatalogIndexTriggers
      */
     public function brandAliasChanged(int $brandId): void
     {
-        self::afterCommit(function () use ($brandId): void {
+        $this->afterCommit(function () use ($brandId): void {
             $this->outbox->enqueue(SearchEntityType::Brand, [$brandId]);
             $this->outbox->enqueueBrandProducts($brandId);
         });
@@ -121,7 +156,7 @@ final readonly class CatalogIndexTriggers
         $categoryId = $category->id;
         $renamed = ! $created && $category->wasChanged(['name', 'slug', 'parent_id']);
 
-        self::afterCommit(function () use ($categoryId, $renamed): void {
+        $this->afterCommit(function () use ($categoryId, $renamed): void {
             if (! $renamed) {
                 $this->outbox->enqueue(SearchEntityType::Category, [$categoryId]);
 
@@ -144,7 +179,7 @@ final readonly class CatalogIndexTriggers
         $ingredientId = $ingredient->id;
         $renamed = ! $created && $ingredient->wasChanged(['name', 'slug']);
 
-        self::afterCommit(function () use ($ingredientId, $renamed): void {
+        $this->afterCommit(function () use ($ingredientId, $renamed): void {
             $this->outbox->enqueue(SearchEntityType::Ingredient, [$ingredientId]);
 
             if ($renamed) {
@@ -179,7 +214,7 @@ final readonly class CatalogIndexTriggers
      */
     public function merchantChanged(int $merchantId): void
     {
-        self::afterCommit(fn () => $this->outbox->enqueueMerchant($merchantId));
+        $this->afterCommit(fn () => $this->outbox->enqueueMerchant($merchantId));
     }
 
     public function countryUpdated(Country $country): void
@@ -211,7 +246,7 @@ final readonly class CatalogIndexTriggers
         $brandIds = $parents ? self::currentAndOriginal($product, 'brand_id') : [];
         $categoryIds = $parents ? self::currentAndOriginal($product, 'category_id') : [];
 
-        self::afterCommit(function () use ($productId, $parents, $brandIds, $categoryIds): void {
+        $this->afterCommit(function () use ($productId, $parents, $brandIds, $categoryIds): void {
             $this->outbox->enqueue(SearchEntityType::Product, [$productId]);
 
             if (! $parents) {
@@ -233,11 +268,17 @@ final readonly class CatalogIndexTriggers
 
     private function enqueueDocument(SearchEntityType $entity, int $id): void
     {
-        self::afterCommit(fn () => $this->outbox->enqueue($entity, [$id]));
+        $this->afterCommit(fn () => $this->outbox->enqueue($entity, [$id]));
     }
 
-    private static function afterCommit(Closure $write): void
+    /**
+     * Inside a transaction the outbox batches the whole after-commit phase
+     * (F-13: one write per publish chunk, not per offer); outside one the
+     * write runs at once.
+     */
+    private function afterCommit(Closure $write): void
     {
+        $this->outbox->batchUntilCommitted();
         DB::afterCommit($write);
     }
 

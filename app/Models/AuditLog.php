@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int|null $actor_id
  * @property string $actor_type user|system
+ * @property string|null $actor_component acting system component (system actors only)
  * @property string $action
  * @property string|null $auditable_type
  * @property int|null $auditable_id
@@ -22,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $user_agent
  * @property Carbon $created_at
  */
-#[Fillable(['actor_id', 'actor_type', 'action', 'auditable_type', 'auditable_id', 'before', 'after', 'correlation_id', 'ip_address', 'user_agent'])]
+#[Fillable(['actor_id', 'actor_type', 'actor_component', 'action', 'auditable_type', 'auditable_id', 'before', 'after', 'correlation_id', 'ip_address', 'user_agent'])]
 class AuditLog extends Model
 {
     use AppendOnly;

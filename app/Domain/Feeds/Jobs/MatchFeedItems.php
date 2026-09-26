@@ -3,6 +3,7 @@
 namespace App\Domain\Feeds\Jobs;
 
 use App\Domain\Compliance\Queries\ListingMarkets;
+use App\Domain\Feeds\Exceptions\FeedRunFailure;
 use App\Domain\Feeds\FeedErrorCode;
 use App\Domain\Feeds\FeedErrorSeverity;
 use App\Domain\Feeds\FeedItemMatchStatus;
@@ -10,6 +11,7 @@ use App\Domain\Feeds\FeedItemValidationStatus;
 use App\Domain\Feeds\FeedRunStatus;
 use App\Domain\Feeds\Lifecycle\FeedRunTransitions;
 use App\Domain\Feeds\Pipeline\FeedItemListing;
+use App\Domain\Feeds\Pipeline\FeedPayloadImporter;
 use App\Domain\Feeds\Pipeline\FeedRunPipeline;
 use App\Domain\Matching\Actions\MatchContext;
 use App\Domain\Matching\Actions\MatchListing;
@@ -45,6 +47,10 @@ use Illuminate\Support\Facades\DB;
  * Per chunk, every listing is upserted first, then the chunk's candidates are
  * prefetched at once ({@see MatchListing::prime()}) and the listings matched,
  * so candidate lookups cost a few queries per chunk, not per item.
+ * Rows rejected here (SKU_OWNED_BY_OTHER_SOURCE) count toward the reject
+ * threshold like the rows parsing rejected (F-08): when the run's combined
+ * invalid share exceeds `comparo.feeds.max_rejected_ratio` after matching,
+ * the run fails with REJECT_THRESHOLD_EXCEEDED and nothing is published.
  * The next stage (PublishFeedRun) moves the run to `publishing`.
  */
 final class MatchFeedItems implements ShouldQueue
@@ -92,6 +98,27 @@ final class MatchFeedItems implements ShouldQueue
             });
 
         FeedRun::query()->whereKey($run->id)->where('status', FeedRunStatus::Matching->value)->toBase()->update($this->metrics($run->id));
+
+        $this->enforceRejectThreshold($run->id);
+    }
+
+    /**
+     * Parsing checked the threshold before matching; the rows matching
+     * rejected are added to rows_invalid, so the share is checked again on
+     * the run's current counters (a retry re-reads them, never double counts).
+     */
+    private function enforceRejectThreshold(int $runId): void
+    {
+        $counters = FeedRun::query()->whereKey($runId)->toBase()->first(['rows_read', 'rows_invalid']);
+        $maxRejectedRatio = (float) config('comparo.feeds.max_rejected_ratio', 0.2);
+
+        if ($counters === null || ! FeedPayloadImporter::exceedsRejectThreshold(['rows_read' => (int) $counters->rows_read, 'rows_invalid' => (int) $counters->rows_invalid], $maxRejectedRatio)) {
+            return;
+        }
+
+        $this->failPermanently(new FeedRunFailure(FeedErrorCode::RejectThresholdExceeded, [
+            'percent' => (int) round($maxRejectedRatio * 100),
+        ]));
     }
 
     private function claim(FeedRun $run, FeedRunTransitions $transitions): bool

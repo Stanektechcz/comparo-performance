@@ -56,7 +56,8 @@ it('records a system action without a request', function () {
         ->and($stored->auditable_type)->toBeNull()
         ->and($stored->auditable_id)->toBeNull()
         ->and($stored->before)->toBeNull()
-        ->and($stored->after)->toBe([AuditLogger::SYSTEM_COMPONENT_KEY => 'feeds.scheduler'])
+        ->and($stored->after)->toBeNull()
+        ->and($stored->actor_component)->toBe('feeds.scheduler')
         ->and($stored->correlation_id)->toBeNull()
         ->and($stored->ip_address)->toBeNull()
         ->and($stored->user_agent)->toBeNull();

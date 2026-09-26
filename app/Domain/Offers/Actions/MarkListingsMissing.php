@@ -17,10 +17,15 @@ use Illuminate\Support\Facades\DB;
  *
  * `missing_run_count` is DERIVED, never incremented: the number of published
  * runs after the listing's last sighting (`last_seen_run_id`), so a retried
- * reconciliation writes the same value (idempotent).
+ * reconciliation writes the same value (idempotent). It is clamped at
+ * {@see self::MAX_MISSING_RUN_COUNT}, the maximum of the unsigned tinyint
+ * column, so a listing missing for hundreds of runs never overflows it (F-09).
  */
 final class MarkListingsMissing
 {
+    /** Maximum of merchant_products.missing_run_count (unsigned tinyint). */
+    public const int MAX_MISSING_RUN_COUNT = 255;
+
     /**
      * @param  QueryBuilder  $publishedRunIds  a query selecting one `id` column: the source's
      *                                         published runs up to and including `$runId`
@@ -29,7 +34,7 @@ final class MarkListingsMissing
     public function handle(int $feedSourceId, int $runId, QueryBuilder $publishedRunIds): int
     {
         $publishedRunsSinceLastSeen = DB::query()
-            ->selectRaw('count(*)')
+            ->selectRaw(sprintf('CASE WHEN count(*) > %1$d THEN %1$d ELSE count(*) END', self::MAX_MISSING_RUN_COUNT))
             ->fromSub($publishedRunIds, 'published_runs')
             ->whereRaw('published_runs.id > COALESCE(merchant_products.last_seen_run_id, 0)');
 

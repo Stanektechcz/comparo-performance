@@ -20,6 +20,8 @@ use App\Domain\Pricing\Currency\ExchangeRates;
 use App\Domain\Pricing\Events\PriceChanged;
 use App\Domain\Search\Indexing\CatalogIndexTriggers;
 use App\Domain\Search\Indexing\Listeners\EnqueueProductDocuments;
+use App\Domain\Search\Indexing\PendingOutboxWrites;
+use App\Domain\Search\Indexing\SearchOutbox;
 use App\Domain\Search\Listeners\InvalidateCachedSuggestions;
 use App\Models\Brand;
 use App\Models\BrandAlias;
@@ -27,6 +29,7 @@ use App\Models\Category;
 use App\Models\Country;
 use App\Models\Coupon;
 use App\Models\Ingredient;
+use App\Models\IngredientProduct;
 use App\Models\Merchant;
 use App\Models\MerchantRiskEvent;
 use App\Models\MerchantShippingZone;
@@ -34,9 +37,12 @@ use App\Models\MerchantTrustSignal;
 use App\Models\Offer;
 use App\Models\Product;
 use App\Models\ProductComplianceRule;
+use App\Models\ProductVariant;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Events\TransactionCommitted;
+use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
@@ -60,6 +66,9 @@ class AppServiceProvider extends ServiceProvider
         // across a results page's product cards but never carried over to
         // the next job on a persistent queue worker.
         $this->app->scoped(ExchangeRates::class);
+
+        // Scoped: the outbox batch of one request or job's transactions (F-13).
+        $this->app->scoped(PendingOutboxWrites::class);
     }
 
     /**
@@ -108,6 +117,13 @@ class AppServiceProvider extends ServiceProvider
     {
         $triggers = fn (): CatalogIndexTriggers => $this->app->make(CatalogIndexTriggers::class);
 
+        // The outbox rows collected during a transaction's after-commit phase
+        // are written once that phase ends (the connection fires `committed`
+        // after running the after-commit callbacks).
+        $outbox = fn (): SearchOutbox => $this->app->make(SearchOutbox::class);
+        Event::listen(TransactionCommitted::class, static fn (TransactionCommitted $event) => $event->connectionName === DB::getDefaultConnection() ? $outbox()->flushPending() : null);
+        Event::listen(TransactionRolledBack::class, static fn (TransactionRolledBack $event) => $event->connectionName === DB::getDefaultConnection() ? $outbox()->flushPending(rolledBack: true) : null);
+
         // `updated` fires only for a real change; `saved` cannot tell a creation
         // from a later update of the same instance (wasRecentlyCreated stays true).
         foreach (['created', 'updated', 'deleted'] as $hook) {
@@ -117,6 +133,12 @@ class AppServiceProvider extends ServiceProvider
         Product::created(static fn (Product $model) => $triggers()->productSaved($model, true));
         Product::updated(static fn (Product $model) => $triggers()->productSaved($model, false));
         Product::deleted(static fn (Product $model) => $triggers()->productDeleted($model));
+
+        foreach (['created', 'updated', 'deleted'] as $hook) {
+            ProductVariant::{$hook}(static fn (ProductVariant $model) => $triggers()->productVariantChanged($model));
+            IngredientProduct::{$hook}(static fn (IngredientProduct $model) => $triggers()->ingredientLinkChanged($model));
+        }
+
         Brand::created(static fn (Brand $model) => $triggers()->brandSaved($model, true));
         Brand::updated(static fn (Brand $model) => $triggers()->brandSaved($model, false));
         Brand::deleted(static fn (Brand $model) => $triggers()->brandDeleted($model));

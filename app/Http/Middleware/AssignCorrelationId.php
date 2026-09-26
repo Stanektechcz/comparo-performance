@@ -16,9 +16,11 @@ use Symfony\Component\HttpFoundation\Response;
  * handling the request (and further down the job chain).
  *
  * The client IP and user agent are stored as *hidden* Context values: they
- * reach the audit log (AuditLogger) but never the log records. Note: this
- * middleware is prepended to the global stack, so if trusted proxies are
- * configured later it must run after TrustProxies to see the real client IP.
+ * reach the audit log (AuditLogger) but never the log records. The
+ * middleware is appended to the global stack (bootstrap/app.php), so it runs
+ * after TrustProxies and `$request->ip()` is the client address resolved
+ * through the configured trusted proxies (config/trustedproxy.php), never a
+ * proxy's address nor a spoofed X-Forwarded-For from an untrusted caller.
  */
 class AssignCorrelationId
 {
