@@ -2,6 +2,7 @@
 
 namespace App\Domain\Matching\Actions;
 
+use App\Domain\Matching\Engine\CandidateProduct;
 use App\Domain\Matching\Engine\FeedItemFacts;
 use App\Domain\Matching\Engine\MatchBucket;
 use App\Domain\Matching\Engine\MatchResult;
@@ -13,6 +14,7 @@ use App\Domain\Matching\Queries\ActivePolicy;
 use App\Domain\Matching\Queries\CandidateProducts;
 use App\Domain\Matching\Queries\ListingFacts;
 use App\Domain\Matching\Queries\MatchComponents;
+use App\Domain\Matching\Queries\RejectedProducts;
 use App\Domain\Offers\Actions\LinkListing;
 use App\Domain\Platform\Features\Feature;
 use App\Domain\Platform\Features\FeatureFlags;
@@ -40,6 +42,16 @@ use Illuminate\Support\Facades\DB;
  * - `unmatched`: unlinked; a decision (`unlinked`) is appended only when the
  *   listing was associated with a product (linked, suggested or held), so
  *   never-matched listings do not grow the history on every run.
+ *
+ * Rejected pairs are remembered (BACKLOG F-05): a product a person rejected
+ * for this listing ({@see RejectedProducts}, derived from the decision
+ * history) is removed from the candidates before scoring, so the engine never
+ * suggests, auto-links or holds it for this listing again — not after the
+ * facts change, not under a new policy and not on a forced rematch. The
+ * next-best candidate is used instead (or none: the listing stays unmatched).
+ * Only a person can re-open the pair, by linking that product explicitly
+ * (choose/confirm or a staff {@see Rematch}); that later human link lifts the
+ * rejection. Other listings are unaffected.
  *
  * Everything is written in one transaction; {@see ProductMatched} fires after
  * commit when the listing becomes linked.
@@ -70,6 +82,7 @@ final class MatchListing
         private readonly DecisionWriter $writer,
         private readonly ComplianceHolds $holds,
         private readonly LinkListing $linkListing,
+        private readonly RejectedProducts $rejectedProducts,
     ) {}
 
     /**
@@ -96,7 +109,7 @@ final class MatchListing
             return $this->reusedOutcome($listing, $current);
         }
 
-        $result = $this->matcher->match($facts, $this->candidates->for($facts), $this->candidates->aliasSets(), $active->policy);
+        $result = $this->matcher->match($facts, $this->eligibleCandidates($listing, $facts), $this->candidates->aliasSets(), $active->policy);
         $reason = $this->reason($current, $fingerprint, $active, $context);
 
         return DB::transaction(function () use ($listing, $facts, $result, $active, $context, $reason): MatchOutcome {
@@ -185,6 +198,27 @@ final class MatchListing
         }
 
         return new MatchOutcome(ListingMatchStatus::Unmatched, null, $result->score, MatchBucket::Unmatched, false, $current?->id);
+    }
+
+    /**
+     * The narrowed candidates minus the products a person rejected for this
+     * listing; the id order (the engine's tie-break) is kept.
+     *
+     * @return list<CandidateProduct>
+     */
+    private function eligibleCandidates(MerchantProduct $listing, FeedItemFacts $facts): array
+    {
+        $candidates = $this->candidates->for($facts);
+        $rejected = $this->rejectedProducts->for($listing);
+
+        if ($rejected === []) {
+            return $candidates;
+        }
+
+        return array_values(array_filter(
+            $candidates,
+            static fn (CandidateProduct $candidate): bool => ! in_array($candidate->productId, $rejected, true),
+        ));
     }
 
     private function isReusable(MerchantProduct $listing, MatchingDecision $current, string $fingerprint, ActivePolicy $active, MatchContext $context): bool

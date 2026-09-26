@@ -8,11 +8,19 @@ use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
 
 /**
- * Reads aggregated search demand. A query is exposed only when at least
- * `minSessions` sessions searched it (k-anonymity, A-24). Session hashes
- * rotate daily, so sessions are summed per day: one browser searching on
- * three days counts three times — deliberately, since linking days is
- * exactly what the rotation prevents.
+ * Reads aggregated search demand under a k-anonymity threshold (A-24,
+ * k = `minSessions`). A query is exposed only when BOTH hold in the window:
+ *
+ * - on at least one day, k DISTINCT sessions searched it (max(daily sessions) ≥ k), and
+ * - the window total of daily sessions is ≥ k.
+ *
+ * Why per day (BACKLOG F-16): session hashes rotate daily by design, so
+ * distinctness can only be established within one day — linking a browser
+ * across days is exactly what the rotation prevents. Summing daily counts
+ * alone let one browser searching on k different days pass as k people; the
+ * per-day condition closes that. (The sum condition is implied by the per-day
+ * one and kept explicit as the stated rule.) The reported `sessions` is still
+ * the window sum of daily distinct sessions.
  */
 final readonly class SearchDemandReport
 {
@@ -39,6 +47,7 @@ final readonly class SearchDemandReport
             ->whereDate('date', '<=', $last)
             ->groupBy('query_hash')
             ->selectRaw('query_hash, max(query_normalized) as query, sum(searches) as searches, sum(zero_results) as zero_results, sum(clicks) as clicks, sum(sessions) as sessions')
+            ->havingRaw('max(sessions) >= ?', [$minSessions])
             ->havingRaw('sum(sessions) >= ?', [$minSessions])
             ->orderByDesc('searches')
             ->orderBy('query_hash')

@@ -59,7 +59,64 @@ final class OfferComparisonPresenter
      */
     public function forPage(Product $product, MarketContext $market, DateTimeImmutable $now, ?ComplianceDecision $compliance = null): array
     {
-        $page = $this->cached($product, $market, $now, self::PAGE_FORMAT, $compliance, fn (OfferComparison $comparison): array => [
+        $page = $this->cached($product, $market, $now, self::PAGE_FORMAT, $compliance, $this->pagePayload(...));
+        $page['topEligibleTotal'] = self::moneyFromScalars($page['topEligibleTotal']);
+
+        return $page;
+    }
+
+    /**
+     * {@see self::forPage()} for a page of products (BACKLOG F-15), keyed by
+     * product id. Each product keeps its own cache entry, key and validity;
+     * only the cache misses are compared, all together through
+     * {@see ProductOfferComparison::compareMany()}, so a cold page costs a
+     * constant number of queries instead of ~8–10 per product. Payloads are
+     * identical to forPage()'s.
+     *
+     * @param  list<Product>  $products
+     * @param  array<int, ComplianceDecision>|null  $decisions  keyed by product id; same precondition as forPage()'s `$compliance`
+     * @return array<int, array{compliance: array<string, mixed>, offers: list<array<string, mixed>>, offerSummary: array<string, mixed>, topEligibleTotal: Money|null}>
+     */
+    public function forPageMany(array $products, MarketContext $market, DateTimeImmutable $now, ?array $decisions = null): array
+    {
+        $payloads = [];
+        $misses = [];
+
+        foreach ($products as $product) {
+            $key = $this->cacheKey($product, $market, self::PAGE_FORMAT);
+            $hit = $this->cachedPayload($key, $now);
+
+            if ($hit !== null) {
+                $payloads[$product->id] = $hit;
+            } else {
+                $misses[$product->id] = ['product' => $product, 'key' => $key];
+            }
+        }
+
+        if ($misses !== []) {
+            $comparisons = $this->comparison->compareMany(array_column($misses, 'product'), $market, $now, $decisions);
+
+            foreach ($misses as $productId => $miss) {
+                $payloads[$productId] = $this->store($miss['key'], $comparisons[$productId], $this->pagePayload(...));
+            }
+        }
+
+        $pages = [];
+        foreach ($products as $product) {
+            $page = $payloads[$product->id];
+            $page['topEligibleTotal'] = self::moneyFromScalars($page['topEligibleTotal']);
+            $pages[$product->id] = $page;
+        }
+
+        return $pages;
+    }
+
+    /**
+     * @return array{compliance: array<string, mixed>, offers: list<array<string, mixed>>, offerSummary: array<string, mixed>, topEligibleTotal: array{minor: int, currency: string}|null}
+     */
+    private function pagePayload(OfferComparison $comparison): array
+    {
+        return [
             'compliance' => self::compliance($comparison->compliance),
             'offers' => array_map(fn (ComparedOffer $offer): array => $this->offerRow($offer, $comparison), $comparison->offers),
             'offerSummary' => [
@@ -73,11 +130,7 @@ final class OfferComparisonPresenter
             ],
             // Cached as scalars: stores that serialize values refuse objects (cache.serializable_classes = false).
             'topEligibleTotal' => self::moneyScalars($this->topEligibleTotal($comparison)),
-        ]);
-
-        $page['topEligibleTotal'] = self::moneyFromScalars($page['topEligibleTotal']);
-
-        return $page;
+        ];
     }
 
     /**
@@ -186,7 +239,15 @@ final class OfferComparisonPresenter
      */
     private function cached(Product $product, MarketContext $market, DateTimeImmutable $now, string $format, ?ComplianceDecision $compliance, Closure $present): array
     {
-        $key = CacheKeys::offerComparison(
+        $key = $this->cacheKey($product, $market, $format);
+
+        return $this->cachedPayload($key, $now)
+            ?? $this->store($key, $this->comparison->compare($product, $market, $now, $compliance), $present);
+    }
+
+    private function cacheKey(Product $product, MarketContext $market, string $format): string
+    {
+        return CacheKeys::offerComparison(
             $product->id,
             $market->code,
             $market->currency,
@@ -194,13 +255,27 @@ final class OfferComparisonPresenter
             $this->versions->forProduct($product->id),
             $format,
         );
+    }
 
+    /**
+     * The payload {@see self::store()} cached under `$key` when it is still
+     * valid at `$now`, else null. Cache contents are untyped, as stored.
+     */
+    private function cachedPayload(string $key, DateTimeImmutable $now): mixed
+    {
         $hit = Cache::get($key);
-        if (is_array($hit) && ($hit['valid_until'] ?? 0) > $now->getTimestamp()) {
-            return $hit['payload'];
-        }
 
-        $comparison = $this->comparison->compare($product, $market, $now, $compliance);
+        return is_array($hit) && ($hit['valid_until'] ?? 0) > $now->getTimestamp() ? $hit['payload'] : null;
+    }
+
+    /**
+     * @template T of array
+     *
+     * @param  Closure(OfferComparison): T  $present
+     * @return T
+     */
+    private function store(string $key, OfferComparison $comparison, Closure $present): array
+    {
         $payload = $present($comparison);
         Cache::put($key, ['valid_until' => $comparison->validUntil->getTimestamp(), 'payload' => $payload], $comparison->validUntil);
 

@@ -83,6 +83,7 @@ final class ProductOfferComparison
         private readonly PriceHistoryAnalyzer $historyAnalyzer,
         private readonly PriceConfidenceService $priceConfidence,
         private readonly OfferPriceTerms $priceTerms,
+        private readonly ProductHistoryMedians $historyMedians,
     ) {}
 
     public function compare(Product $product, MarketContext $market, DateTimeImmutable $now, ?ComplianceDecision $compliance = null): OfferComparison
@@ -95,7 +96,96 @@ final class ProductOfferComparison
             return $this->withoutOffers($market, $compliance, $weights, $conversion, $now);
         }
 
-        $offers = $this->loadOffers($product, $market, $now);
+        $offers = $this->loadOffers([$product->id], $market, $now);
+
+        return $this->assemble($offers, $market, $now, $compliance, $weights, $conversion, $this->completenessOf($product), $this->historyMedian($product->id, $now));
+    }
+
+    /**
+     * The comparisons of a page of products (BACKLOG F-15), keyed by product
+     * id: exactly what {@see self::compare()} returns for each product, but
+     * the offers with their whole eager-load graph, the compliance decisions
+     * missing from `$decisions`, the completeness counts and the history
+     * medians are each loaded once for all products instead of per product
+     * (a constant number of queries per page instead of ~8–10 per product).
+     *
+     * `$decisions`, when given, has the precondition of `compare()`'s
+     * `$compliance` (what `ComplianceResolver::decide()` returns per product).
+     *
+     * @param  list<Product>  $products
+     * @param  array<int, ComplianceDecision>|null  $decisions  keyed by product id
+     * @return array<int, OfferComparison>
+     */
+    public function compareMany(array $products, MarketContext $market, DateTimeImmutable $now, ?array $decisions = null): array
+    {
+        $byId = [];
+        foreach ($products as $product) {
+            $byId[$product->id] = $product;
+        }
+
+        if ($byId === []) {
+            return [];
+        }
+
+        $decisions = $this->decisionsFor(array_keys($byId), $market, $decisions ?? []);
+        $weights = $this->rankingWeights->current();
+        $conversion = $this->exchangeRates->conversion((string) config('comparo.comparison_currency'), $market->currency, $now);
+
+        $visible = array_values(array_filter($byId, static fn (Product $product): bool => $decisions[$product->id]->status->offersVisible()));
+        $visibleIds = array_map(static fn (Product $product): int => $product->id, $visible);
+        $offersByProduct = $this->groupByProduct($this->loadOffers($visibleIds, $market, $now));
+        $completeness = $this->completenessOfMany($visible);
+        $medians = $this->historyMedians->forProducts($visibleIds, $now);
+
+        $comparisons = [];
+        foreach ($byId as $id => $product) {
+            $comparisons[$id] = $decisions[$id]->status->offersVisible()
+                ? $this->assemble($offersByProduct[$id] ?? new Collection, $market, $now, $decisions[$id], $weights, $conversion, $completeness[$id], $medians[$id])
+                : $this->withoutOffers($market, $decisions[$id], $weights, $conversion, $now);
+        }
+
+        return $comparisons;
+    }
+
+    /**
+     * @param  list<int>  $productIds
+     * @param  array<int, ComplianceDecision>  $known
+     * @return array<int, ComplianceDecision>
+     */
+    private function decisionsFor(array $productIds, MarketContext $market, array $known): array
+    {
+        $missing = array_values(array_filter($productIds, static fn (int $id): bool => ! isset($known[$id])));
+
+        return $known + ($missing === [] ? [] : $this->complianceResolver->decideMany($missing, $market));
+    }
+
+    /**
+     * @param  Collection<int, Offer>  $offers  in id order
+     * @return array<int, Collection<int, Offer>> keyed by product id, each in id order
+     */
+    private function groupByProduct(Collection $offers): array
+    {
+        $grouped = [];
+        foreach ($offers as $offer) {
+            $grouped[$offer->product_id][] = $offer;
+        }
+
+        return array_map(static fn (array $group): Collection => new Collection($group), $grouped);
+    }
+
+    /**
+     * @param  Collection<int, Offer>  $offers  the product's active offers of listed merchants, in id order
+     */
+    private function assemble(
+        Collection $offers,
+        MarketContext $market,
+        DateTimeImmutable $now,
+        ComplianceDecision $compliance,
+        RankingWeights $weights,
+        ?CurrencyConversion $conversion,
+        ProductCompleteness $completeness,
+        int $historyMedian,
+    ): OfferComparison {
         $terms = $this->priceTerms->forMarket($offers, $now);
         $rates = $this->comparisonRates($offers, $terms, $now);
         $stats = $this->marketStats->calculate(array_values($offers->map(static fn (Offer $offer): MarketListing => new MarketListing(
@@ -104,9 +194,6 @@ final class ProductOfferComparison
             ($terms[$offer->id] ?? null)?->freeShippingThreshold?->minor,
             $offer->currency,
         ))->all()), $rates);
-
-        $completeness = $this->completenessOf($product);
-        $historyMedian = $this->historyMedian($product->id, $now);
 
         $ranked = [];
         foreach ($offers as $offer) {
@@ -142,12 +229,17 @@ final class ProductOfferComparison
     }
 
     /**
+     * @param  list<int>  $productIds
      * @return Collection<int, Offer>
      */
-    private function loadOffers(Product $product, MarketContext $market, DateTimeImmutable $now): Collection
+    private function loadOffers(array $productIds, MarketContext $market, DateTimeImmutable $now): Collection
     {
+        if ($productIds === []) {
+            return new Collection;
+        }
+
         return Offer::query()
-            ->where('product_id', $product->id)
+            ->whereIn('product_id', $productIds)
             ->where('is_active', true)
             ->whereHas('merchant', static fn ($query) => $query->listed())
             ->with([
@@ -244,11 +336,46 @@ final class ProductOfferComparison
 
     private function completenessOf(Product $product): ProductCompleteness
     {
-        $product->loadCount([
+        $product->loadCount(self::completenessCounts());
+
+        return $this->completenessFromCounts($product);
+    }
+
+    /**
+     * The completeness of many products, with their counts loaded in one query.
+     *
+     * @param  list<Product>  $products
+     * @return array<int, ProductCompleteness> keyed by product id
+     */
+    private function completenessOfMany(array $products): array
+    {
+        if ($products === []) {
+            return [];
+        }
+
+        (new Collection($products))->loadCount(self::completenessCounts());
+
+        $completeness = [];
+        foreach ($products as $product) {
+            $completeness[$product->id] = $this->completenessFromCounts($product);
+        }
+
+        return $completeness;
+    }
+
+    /**
+     * @return array<int|string, mixed>
+     */
+    private static function completenessCounts(): array
+    {
+        return [
             'ingredients',
             'variants as flavour_variants_count' => static fn ($query) => $query->where('kind', ProductVariant::FLAVOUR),
-        ]);
+        ];
+    }
 
+    private function completenessFromCounts(Product $product): ProductCompleteness
+    {
         return $this->completeness->evaluate(new ProductFacts(
             hasEan: filled($product->ean),
             // brand_id and category_id are non-nullable foreign keys (every

@@ -72,8 +72,8 @@ final class ProductPresenter
      * `ComplianceResolver::decide()` would return for it in this market at
      * `$now` (e.g. a caller's own `decideMany()` batch) — passing it skips a
      * redundant per-product compliance query for a product already covered
-     * by the caller's batch; any product missing from the map still resolves
-     * its own decision.
+     * by the caller's batch; the products missing from the map (on a cache
+     * miss) have their decisions resolved together in one batch.
      *
      * @param  Collection<int, Product>  $products
      * @param  array<int, ComplianceDecision>|null  $decisionsByProductId
@@ -82,10 +82,11 @@ final class ProductPresenter
     public function summaries(Collection $products, MarketContext $market, DateTimeImmutable $now, ?array $decisionsByProductId = null): array
     {
         $products->loadMissing(['brand', 'category']);
+        // Cache misses are compared together (BACKLOG F-15); hits and payloads are unchanged.
+        $pages = $this->offers->forPageMany(array_values($products->all()), $market, $now, $decisionsByProductId);
 
-        return array_values($products->map(function (Product $product) use ($market, $now, $decisionsByProductId): array {
-            $compliance = $decisionsByProductId[$product->id] ?? null;
-            $summary = $this->offers->forPage($product, $market, $now, $compliance)['offerSummary'];
+        return array_values($products->map(function (Product $product) use ($pages): array {
+            $summary = $pages[$product->id]['offerSummary'];
 
             return [
                 'id' => $product->id,

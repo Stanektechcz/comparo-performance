@@ -75,9 +75,10 @@ it('skips per-product compliance queries when decisions are pre-resolved, and ma
     $presenter = app(ProductPresenter::class);
     $counter = complianceQueryCounter();
 
-    // Baseline: no pre-resolved decisions => one compliance query per product.
+    // Baseline: no pre-resolved decisions => the cold products' decisions are
+    // resolved in one batched compliance query (BACKLOG F-15), not one each.
     $resolverPath = $presenter->summaries($resolvedProducts, $market, $now);
-    expect($counter())->toBe(3);
+    expect($counter())->toBe(1);
 
     // A caller that already batch-resolved compliance for the page.
     $decisions = app(ComplianceResolver::class)->decideMany(comparisonQueryProductIds($preResolvedProducts), $market);

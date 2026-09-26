@@ -78,8 +78,9 @@ it('replaces a day when it is aggregated again', function () {
 });
 
 it('exposes a query only when at least 3 sessions searched it', function () {
-    foreach (['2026-09-20', '2026-09-22', '2026-09-24'] as $index => $date) {
-        SearchDemandDaily::factory()->create(['date' => $date, 'market' => 'DE', 'query_hash' => hash('sha256', 'creatine'), 'query_normalized' => 'creatine', 'searches' => 5, 'zero_results' => 1, 'clicks' => 2, 'sessions' => 1]);
+    // One day reaches 3 distinct sessions (BACKLOG F-16: summing days alone is not enough).
+    foreach (['2026-09-20' => 1, '2026-09-22' => 3, '2026-09-24' => 1] as $date => $sessions) {
+        SearchDemandDaily::factory()->create(['date' => $date, 'market' => 'DE', 'query_hash' => hash('sha256', 'creatine'), 'query_normalized' => 'creatine', 'searches' => 5, 'zero_results' => 1, 'clicks' => 2, 'sessions' => $sessions]);
     }
     SearchDemandDaily::factory()->create(['date' => '2026-09-24', 'market' => 'DE', 'query_hash' => hash('sha256', 'rare'), 'query_normalized' => 'rare', 'searches' => 9, 'zero_results' => 9, 'clicks' => 0, 'sessions' => 2]);
     SearchDemandDaily::factory()->create(['date' => '2026-09-24', 'market' => 'CZ', 'query_hash' => hash('sha256', 'kreatin'), 'query_normalized' => 'kreatin', 'searches' => 9, 'zero_results' => 0, 'clicks' => 0, 'sessions' => 5]);
@@ -89,7 +90,7 @@ it('exposes a query only when at least 3 sessions searched it', function () {
     $until = new DateTimeImmutable('2026-09-24');
 
     expect($report->topQueries('DE', 7, until: $until))->toBe([
-        ['query' => 'creatine', 'query_hash' => hash('sha256', 'creatine'), 'searches' => 15, 'zero_results' => 3, 'clicks' => 6, 'sessions' => 3],
+        ['query' => 'creatine', 'query_hash' => hash('sha256', 'creatine'), 'searches' => 15, 'zero_results' => 3, 'clicks' => 6, 'sessions' => 5],
     ])
         ->and(array_column($report->topQueries('DE', 7, 2, $until), 'query'))->toBe(['creatine', 'rare'])
         ->and(array_column($report->topQueries('de', 90, until: $until), 'query'))->toBe(['old', 'creatine']);

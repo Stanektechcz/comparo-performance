@@ -37,6 +37,12 @@ function CountLine({
         );
     }
 
+    if (summary.shippingUnavailable > 0) {
+        extras.push(
+            `${summary.shippingUnavailable} ${pluralize(summary.shippingUnavailable, 'offer')} whose shipping cost we cannot show yet because no exchange rate is available for its currency`,
+        );
+    }
+
     if (summary.withheldFlagged > 0) {
         extras.push(
             `${summary.withheldFlagged} withheld while an unusual price is under review`,
