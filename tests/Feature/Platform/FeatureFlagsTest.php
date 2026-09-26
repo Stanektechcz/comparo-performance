@@ -64,14 +64,19 @@ it('defaults reviews-submission and merchant-reviews on in the testing environme
 });
 
 it('defaults reviews-submission and merchant-reviews OFF outside local/testing/demo (A-36)', function () {
-    $originalAppEnv = getenv('APP_ENV');
+    // env() reads $_SERVER first, then $_ENV, then getenv(): a .env that sets the
+    // flags explicitly (CI copies .env.example) must not leak into this check.
+    $keys = ['APP_ENV', 'FEATURE_REVIEWS_SUBMISSION', 'FEATURE_MERCHANT_REVIEWS'];
+    $saved = [];
 
+    foreach ($keys as $key) {
+        $saved[$key] = [$_SERVER[$key] ?? null, $_ENV[$key] ?? null, getenv($key)];
+        unset($_SERVER[$key], $_ENV[$key]);
+        putenv($key);
+    }
+
+    $_SERVER['APP_ENV'] = $_ENV['APP_ENV'] = 'production';
     putenv('APP_ENV=production');
-    $_ENV['APP_ENV'] = 'production';
-    putenv('FEATURE_REVIEWS_SUBMISSION');
-    unset($_ENV['FEATURE_REVIEWS_SUBMISSION']);
-    putenv('FEATURE_MERCHANT_REVIEWS');
-    unset($_ENV['FEATURE_MERCHANT_REVIEWS']);
 
     try {
         // Re-evaluated fresh, bypassing the already-cached app config, so
@@ -81,12 +86,19 @@ it('defaults reviews-submission and merchant-reviews OFF outside local/testing/d
         expect($features['reviews-submission'])->toBeFalse()
             ->and($features['merchant-reviews'])->toBeFalse();
     } finally {
-        if ($originalAppEnv === false) {
-            putenv('APP_ENV');
-            unset($_ENV['APP_ENV']);
-        } else {
-            putenv("APP_ENV={$originalAppEnv}");
-            $_ENV['APP_ENV'] = $originalAppEnv;
+        foreach ($saved as $key => [$server, $env, $process]) {
+            unset($_SERVER[$key], $_ENV[$key]);
+            putenv($key);
+
+            if ($server !== null) {
+                $_SERVER[$key] = $server;
+            }
+            if ($env !== null) {
+                $_ENV[$key] = $env;
+            }
+            if ($process !== false) {
+                putenv("{$key}={$process}");
+            }
         }
     }
 });
