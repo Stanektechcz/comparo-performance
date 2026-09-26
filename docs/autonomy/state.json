@@ -4,10 +4,14 @@
     "current_slice": "reviews-orders-verification",
     "branch": "phase-4/reviews-orders",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "Open items closed: decisions ADR-0018, backlog F-01..F-17 (F-14 deferred), Meilisearch real-server compat, CI connected (PR #1)",
-    "next_task": "PR #1 CI green -> merge; P4-00 apply ADR-0018 config/feature flags; P4-01 Phase 4 analyses",
+    "last_completed_task": "P4-00 config baseline (0227eab); P4-01 design + A-30..A-38 (444616c); PR #1 merged",
+    "next_task": "Integrate P4-02 (schema), P4-03 (pure engines + parity), P4-04 (platform); then wave 2 P4-05 reviews domain + P4-06 verification/orders",
     "blocked_tasks": [],
-    "active_agents": [],
+    "active_agents": [
+        "P4-02 schema (task-deep)",
+        "P4-03 pure engines (task-deep)",
+        "P4-04 platform (task-build)"
+    ],
     "last_full_test_result": {
         "date": "2026-09-26",
         "driver": "sqlite + pgsql 18 (embedded)",
