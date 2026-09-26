@@ -3,6 +3,20 @@
 Newest first. Each entry states where work stopped and the exact next step, so a new session can
 continue without reconstructing context.
 
+## 2026-09-26 (later) — Open items closed, CI connected, Phase 4 ready
+
+- Owner delegated all open decisions: D-01…D-29 decided (ADR-0018, legal/DPO prerequisites marked);
+  A-01…A-29 confirmed (A-12 amended). Config changes implied by ADR-0018 are NOT applied yet (next task P4-00).
+- Backlog F-01…F-17 resolved except F-14 (deferred: the swap rebuild drops orphans); new F-18 (bulk snapshot).
+- Meilisearch adapter verified against a real server (local v1.53.2): contract suite 48/48.
+- GitHub: private repo Stanektechcz/comparo-performance (origin). First CI run on main failed on environment
+  gaps (Wayfinder not generated before the type check, tests dispatching to redis-long, Vite in class-based
+  tests) — fixed in the CI commit; PR #1 (phase-4/reviews-orders → main) runs CI.
+- Local verification: 1 868 tests (1 857 passed, 11 Meilisearch skipped) on SQLite and PostgreSQL; the demo
+  login for browser checks uses COMPARO_DEMO_PASSWORD in the local .env (never committed).
+- **Next:** (1) PR #1 green → merge to main; (2) P4-00 apply ADR-0018 config keys + feature flags (all new
+  flags off); (3) P4-01 Phase 4 analyses → docs/architecture/phase-4-reviews-orders.md → task graph → waves.
+
 ## 2026-09-26 — Phase 3 complete (Gate C), Phase 4 starting
 
 - Phase 3 (search & discovery) is implemented, reviewed (security APPROVE; 2 blockers — reindex lost update,

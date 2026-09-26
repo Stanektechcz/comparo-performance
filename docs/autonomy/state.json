@@ -4,20 +4,16 @@
     "current_slice": "reviews-orders-verification",
     "branch": "phase-4/reviews-orders",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "Phase 3 Gate C + merge into main (search & discovery, multi-currency correctness)",
-    "next_task": "P4-01 Phase 4 read-only analyses -> docs/architecture/phase-4-reviews-orders.md + TASK-GRAPH Phase 4",
+    "last_completed_task": "Open items closed: decisions ADR-0018, backlog F-01..F-17 (F-14 deferred), Meilisearch real-server compat, CI connected (PR #1)",
+    "next_task": "PR #1 CI green -> merge; P4-00 apply ADR-0018 config/feature flags; P4-01 Phase 4 analyses",
     "blocked_tasks": [],
     "active_agents": [],
     "last_full_test_result": {
         "date": "2026-09-26",
         "driver": "sqlite + pgsql 18 (embedded)",
-        "tests": 1803,
-        "passed": 1792,
+        "tests": 1868,
+        "passed": 1857,
         "skipped": 11,
-        "assertions": {
-            "sqlite": 9675,
-            "pgsql": 9672
-        },
         "result": "passed"
     },
     "static_analysis": {
@@ -37,12 +33,15 @@
         "command": "php artisan comparo:verify-prototype"
     },
     "external_blockers": [
-        "No git remote configured: GitHub Actions CI has never executed"
+        "Legal/DPO sign-offs before production (ADR-0018)",
+        "Contracts: affiliate networks, payment provider, mail provider",
+        "Production infrastructure and credentials"
     ],
     "phases_done": [
         "phase-0",
         "phase-1 (first slice)",
         "phase-2",
         "phase-3"
-    ]
+    ],
+    "remote": "https://github.com/Stanektechcz/comparo-performance (private)"
 }
