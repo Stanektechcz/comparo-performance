@@ -15,6 +15,8 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        // Pages must render without a built frontend (CI builds assets in a separate job).
+        $this->withoutVite();
         $this->isolateFakeDisksPerProcess();
     }
 
