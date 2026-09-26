@@ -14,8 +14,8 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | 0 | Foundation | DONE | baseline commit `fe8c42b` | 0 |
 | 1 | Catalogue, offers, landed price, compliance, ranking, history (first slice) | DONE (first slice) | product page from DB with parity | 1 |
 | 2 | Merchant feeds + canonical matching | DONE (Gate C 2026-09-25) | feed URL/upload → parse → match → offer update → product page | 2 |
-| **3** | **Search & discovery (Scout/Meilisearch, facets, suggest, zero-result analytics)** | **IN PROGRESS** | real indexed search obeying market + compliance | 3 |
-| 4 | Reviews, orders, purchase verification | NOT STARTED | review + proof → verification → moderation → aggregate → merchant notification | 4 |
+| 3 | Search & discovery (Scout/Meilisearch, facets, suggest, zero-result analytics) | DONE (Gate C 2026-09-26) | real indexed search obeying market + compliance | 3 |
+| **4** | **Reviews, orders, purchase verification** | **IN PROGRESS** | review + proof → verification → moderation → aggregate → merchant notification | 4 |
 | 5 | Affiliate system (`/go`, attribution, conversions, reconciliation) | NOT STARTED | all purchase CTAs use `/go`; durable attribution | 5 |
 | 6 | Account, alerts, notifications, email | NOT STARTED | price change → alert → in-app + queued email | 6 |
 | 7 | Complete merchant platform | NOT STARTED | onboarding, team, real dashboard, tenant security gate | 7 |

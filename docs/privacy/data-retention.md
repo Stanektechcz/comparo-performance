@@ -31,7 +31,7 @@ operator-adjustable without a code change.
 - No entity in this table is deleted synchronously from a user-facing action; all pruning is scheduled
   (`Feeds\Console\PruneFeedData`, `Search\Analytics\PruneSearchAnalytics`) or has no purge job yet.
 - Search analytics config keys (`comparo.search.analytics.session_hash_days`, `raw_retention_months`,
-  `click_window_minutes`, `min_demand_sessions`) fall back to the defaults in
-  `App\Domain\Search\Analytics\AnalyticsSettings` (90 days, 13 months, 30 minutes, 3 sessions) until they are
-  added to `config/comparo.php`. Recent searches shown on the search page live only in the visitor's
-  browser (`localStorage`) and are never sent to the server.
+  `click_window_minutes`, `min_demand_sessions`) are set in `config/comparo.php` (90 days, 13 months, 30
+  minutes, 3 sessions); `App\Domain\Search\Analytics\AnalyticsSettings::fromConfig()` reads them, falling
+  back to the same figures only if a key is removed. Recent searches shown on the search page live only in
+  the visitor's browser (`localStorage`) and are never sent to the server.

@@ -2,8 +2,8 @@
 
 Consistent with `docs/autonomy/EXTERNAL-DEPENDENCIES.md` (status vocabulary reused here:
 `IMPLEMENTABLE_LOCALLY`, `SANDBOX_AVAILABLE`, `CREDENTIAL_REQUIRED`, `PRODUCTION_ONLY`, `OPTIONAL`).
-Scope: integrations Phase 2 (feeds + matching) actually touches, plus the platform integrations they sit
-on top of.
+Scope: integrations Phase 2 (feeds + matching) and Phase 3 (search & discovery) actually touch, plus the
+platform integrations they sit on top of.
 
 | Provider | Purpose | Adapter | Credentials | Webhooks | Sandbox | Status | Failure mode |
 |---|---|---|---|---|---|---|---|
@@ -13,6 +13,7 @@ on top of.
 | PostgreSQL 16+ | Primary database for feeds/matching/audit tables | Eloquent / query builder | local instance | n/a | SQLite in tests; embedded-postgres for verification | IMPLEMENTABLE_LOCALLY | Migration/query failure surfaces as a 500; queued jobs retry per their `tries`/`backoff()` |
 | Redis (via Horizon) | `feed-import`, `matching`, `pricing` queues | Laravel queue connections + Horizon supervisors | production instance | n/a | database/array drivers locally | PRODUCTION_ONLY | Queue unavailable → jobs pile up undelivered; Horizon dashboard at `/staff/horizon` (`staff.horizon.view`) surfaces this |
 | S3-compatible object storage | Feed payload storage (private disk, `COMPARO_FEEDS_DISK`) | Laravel filesystem disk | bucket + keys | n/a | `local` disk in dev/tests | CREDENTIAL_REQUIRED | Falls back to local disk in non-production envs; production without credentials fails payload writes |
+| Meilisearch | Production search engine (Scout driver `meilisearch`); required in production — `SearchServiceProvider` refuses the local database engine there | `Search\Engines\MeilisearchSearchEngine` via Scout's `Meilisearch\Client` (`config/scout.php` `meilisearch.{host,key,task_timeout_ms}`) | `MEILISEARCH_HOST`, `MEILISEARCH_KEY` | none (Comparo only writes/reads) | CI service only (`getmeili/meilisearch:v1.53.2` in `.github/workflows/tests.yml`); never run against a real server locally in this session | CREDENTIAL_REQUIRED (adapter code itself is FUNCTIONAL — parity-tested behavioural contract, not byte-identical relevance ordering; see `docs/architecture/phase-3-search.md` §3) | `Search\Engines\SearchEngineException` on a task/client error; the local `DatabaseSearchEngine` is the only engine allowed outside production, so a misconfigured non-production env falls back to it rather than failing silently |
 
 ## Known gaps
 
@@ -20,3 +21,7 @@ on top of.
   facing copy.
 - No affiliate/billing/email-provider integration is touched by Phase 2 feeds/matching work; see
   `docs/autonomy/EXTERNAL-DEPENDENCIES.md` for those.
+- The Meilisearch adapter has a CI service and a shared behavioural contract suite
+  (`tests/Feature/Search/EngineContractTest.php`), but GitHub Actions has never executed in this
+  repository (no git remote — see `docs/implementation-status.md`) and no developer has pointed it at a
+  real local Meilisearch instance; treat it as untested against a live server until that happens.

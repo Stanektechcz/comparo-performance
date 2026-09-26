@@ -3,6 +3,34 @@
 Newest first. Each entry states where work stopped and the exact next step, so a new session can
 continue without reconstructing context.
 
+## 2026-09-26 — Phase 3 complete (Gate C), Phase 4 starting
+
+- Phase 3 (search & discovery) is implemented, reviewed (security APPROVE; 2 blockers — reindex lost update,
+  production falling back to the full-scan engine — and all majors fixed in `5833251`), documented (ADR-0016
+  search, ADR-0017 multi-currency, docs/modules/search.md, matrices) and merged into `main` by fast-forward.
+- Also landed: multi-currency correctness (lowest total, market baselines, ranking inputs, shipping/coupon
+  term conversion, `meta.market_min_currency`), cached comparison pages hold scalars only (a cached Money
+  object 500'd the product page on serializing stores), deterministic ranking snapshot test, lint gate now
+  checked by exit code.
+- Gate C: 1 803 tests (1 792 passed, 11 skipped Meilisearch) on SQLite and PostgreSQL, Pint, Larastan 0,
+  parity `--check`, types/lint/build:ssr exit 0, prototype 137/137.
+- Known limits: Meilisearch adapter never run against a real server (CI service added, CI never executed —
+  no remote); no browser check of authenticated pages; follow-ups F-11…F-17 in BACKLOG.md.
+- **Next:** Phase 4 — reviews, orders & purchase verification (programme brief §94–104). Branch
+  `phase-4/reviews-orders` (created). First task P4-01: read-only analyses — prototype reviews/credibility/
+  verification/orders/returns/disputes (REVIEWS.md, ORDERS.md, MODERATION.md, DELIVERY-GUARANTEE.md,
+  seed-orders.js, the HTML review/verification flows; parity fixtures for reviews already exported but not
+  ported — see tools/prototype-parity/export-fixtures.mjs) + Laravel design (private receipt storage with
+  signed URLs, inbound-email adapter + local simulator, affiliate_click_match stub until Phase 5, moderation
+  queue, weighted aggregation by credibility, merchant replies, delivery metrics with minimum samples) →
+  `docs/architecture/phase-4-reviews-orders.md` + Phase 4 section in TASK-GRAPH.md. Keep the same working
+  pattern: analyses → binding design → waves of 3–5 specialists with disjoint files → review council → fixes →
+  Gate C on both drivers → merge.
+- Operating notes: PHP at C:php (`export PATH="/c/php:$PATH"`); PostgreSQL: embedded instance on port 55432
+  (restart with `node start-utf8.mjs` in the scratchpad `pg` folder if down), run with
+  `php -d extension=pdo_pgsql vendor/bin/pest`, never two suites against it at once; the Fact-Forcing Gate hook
+  asks for facts on first file edits and some Bash commands — state them and retry.
+
 ## 2026-09-25 — Phase 2 complete (Gate C), Phase 3 starting
 
 - Phase 2 (merchant feeds + canonical matching) is implemented, reviewed (security PASS; architecture,

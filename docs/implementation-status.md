@@ -1,17 +1,18 @@
 # Implementation status
 
-Updated 2026-09-25 (end of Phase 2 — merchant feeds + canonical matching, Gate C). Status values only:
+Updated 2026-09-26 (Phase 3 — search & discovery). Status values only:
 NOT STARTED · IN PROGRESS · FUNCTIONAL · PARITY VERIFIED · PRODUCTION HARDENED.
 Nothing below is PRODUCTION HARDENED yet: no production deployment, load test or security audit exists.
 No browser (manual or automated E2E) verification of authenticated merchant/staff pages has been run yet
-for the Phase 2 feeds/matching UI — coverage below is Pest Feature/Unit tests only.
+for the Phase 2 feeds/matching UI; the public search page was checked once at 375 px during development
+(no screenshots). Coverage below is otherwise Pest Feature/Unit tests only.
 
-**Quality gates at Phase 2 Gate C** (2026-09-25): Pest **1 298 tests** green on SQLite (7 247 assertions)
-**and** on PostgreSQL 18.4 (embedded, local; CI uses PostgreSQL 16) (7 244 assertions — driver-specific
-schema assertions differ), Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean
-(incl. matching + anomalies fixtures), `npm run types:check` / `check` (1 warning in the parity exporter)
-/ `build:ssr` green, `php artisan comparo:verify-prototype` 137/137. GitHub Actions has never run (no
-git remote).
+**Quality gates at Phase 3 Gate C** (2026-09-26): Pest **1 803 tests** — 1 792 passed, 11 skipped (the
+Meilisearch contract dataset: no local server; CI now provides one) — on SQLite (9 675 assertions) **and**
+on PostgreSQL 18.4 (embedded, local; CI uses PostgreSQL 16) (9 672 assertions — driver-specific schema
+assertions differ), Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean (matching,
+anomalies and search fixtures), `npm run types:check` / `check` / `build:ssr` all exit 0,
+`php artisan comparo:verify-prototype` 137/137. GitHub Actions has never run (no git remote).
 
 ## Modules
 
@@ -36,7 +37,9 @@ git remote).
 | Parity harness | intel.js, HTML engines | tools/prototype-parity/export-fixtures.mjs | — | — | `--check` in CI | FUNCTIONAL | reviews, matching, dosing, delivery fixtures exported but not yet ported |
 | Audit log | `S.auditLog` | `Platform\Audit\AuditLogger`/`AuditRedactor`, `AuditAction` (18 cases); audit_logs (append-only, DB trigger, actor FK decoupled from `users` — ADR-0014) | — | — | AppendOnlyHistoryTest; assertions inline in Feeds/Matching Feature tests | FUNCTIONAL | no dedicated audit-log viewer page yet; only Feeds/Matching actions are audited so far, not every privileged action platform-wide |
 | Feature flags | — (new, A-17) | `Platform\Features\{Feature,FeatureFlags}`, config-backed (`config/features.php`), fail-closed via `feature:` route middleware | shared Inertia prop (`clientFlags()`) | gates `/merchant/*` (404 when off) | route-level feature tests | FUNCTIONAL | config-only (no DB-backed store); Pennant deferred |
-| Search | search, synonyms, facets | Scout + meilisearch-php installed, config only | — | — | — | NOT STARTED | Phase 3 |
+| Search & discovery | search, synonyms, facets, header suggest | `App\Domain\Search\**` (see `docs/modules/search.md`), `SearchServiceProvider` (engine binding by `scout.driver`) | `search`, `search.clicks`, `api.public.v1.search.suggest` | `resources/js/pages/search/index.tsx`, header suggest combobox | `tests/Unit/Search/**`, `tests/Feature/Search/**`, `tests/Unit/Parity/{SearchParityTest,SearchSensitivityTest}.php`, `tests/Architecture/{SearchBoundariesTest,SearchJobsTest}.php` | `DatabaseSearchEngine` relevance: **PARITY VERIFIED**; overall module: FUNCTIONAL | Meilisearch adapter never run against a real local server (CI service only, GitHub Actions never executed); no browser check of the search page; cold-cache fan-out cost not load-tested (F-15); indexing batch/chunk sizing not load-tested for many markets (F-17); did-you-mean absent on Meilisearch (falls straight to "browse categories") |
+| Search analytics | zero-result demand, click attribution | `Search\Analytics\{RecordSearch,RecordSearchClick,QueryRedactor,SessionHasher,AggregateSearchDemand,SearchDemandReport,PruneSearchAnalytics}` | — | — | `tests/Feature/Search/Analytics*Test.php` | FUNCTIONAL | k-threshold sums daily sessions rather than deduplicating across days (weaker than distinct-session k-anonymity), DPO sign-off pending (F-16, A-24); D-09 retention periods are safe defaults, not signed off |
+| Multi-currency comparison | — (prototype markets are single-currency) | `Pricing\Currency\{ExchangeRates,ComparisonRates}`, `Pricing\LandedPrice\MerchantTermsConverter` (ADR-0017) | embedded in product page + search props, `meta.market_min_currency` | product page, search result cards | `tests/Unit/Pricing/**`, `tests/Feature/Search/IndexingMarketCurrencyTest.php` | FUNCTIONAL (single-currency paths: **PARITY VERIFIED**, byte-identical to the prototype) | no browser check; real ECB rate import still pending (D-06) — `exchange_rates` is demo data |
 | Feeds & matching (pipeline) | Feed Match Center | `App\Domain\Feeds\**`, `App\Domain\Matching\**` (see `docs/modules/{feeds,matching}.md`) | — | — | `tests/Feature/Feeds/**`, `tests/Feature/Matching/**`, `tests/Architecture/{FeedJobsTest,MatchingBoundariesTest}.php` | FUNCTIONAL (matching engine itself: **PARITY VERIFIED**, see below) | purchase links still go directly to merchants until Phase 5; feed-level shipping stored raw only (D-07); availability-map editing not in the merchant form; `api_push` transport not implemented; canonical-product creation from an approved candidate deferred to Phase 8; no notification on run completion/failure |
 | Matching engine (`intel.js` Engine 2.0 port) | `matchItem` / Product Matching Engine 2.0 | `Matching\Engine\ProductMatcher` + `MatchingPolicy` (`matching_policies`, versioned) | — | — | `tests/Unit/Matching/ProductMatcherTest.php`, `tests/Unit/Parity/{MatchingParityTest,MatchingSensitivityTest}.php`, `tests/Feature/Parity/DatabaseMatchingParityTest.php` | PARITY VERIFIED | candidate narrowing is a documented deviation (ADR-0012 #3), proven bounded on the full catalogue |
 | Merchant portal — feeds | (simulated in prototype only) | `Feeds\Actions\**` behind `FeedSourcePolicy` | — | `resources/js/pages/merchant/feeds/**` | `tests/Feature/Merchant/MerchantFeedsTest.php`, `tests/Feature/Feeds/**` | FUNCTIONAL | no dedicated notification on run completion/failure |

@@ -23,6 +23,8 @@ acceptance; a changed decision gets a new ADR that supersedes the old one.
 | [0013](0013-merchant-feed-ingestion-pipeline.md) | Merchant feed ingestion pipeline (amends ADR-0003) | Accepted | Phase 2 (functional) |
 | [0014](0014-audit-logging.md) | Audit logging | Accepted | Phase 2 (functional) |
 | [0015](0015-domain-events-feature-flags-merchant-context.md) | Domain events, feature flags and merchant context | Accepted | Phase 2 (functional) |
+| [0016](0016-search-and-discovery.md) | Search and discovery | Accepted | Phase 3 (functional; local-engine relevance parity verified) |
+| [0017](0017-multi-currency-comparison.md) | Multi-currency total-price comparison | Accepted | Phase 3 (functional; single-currency paths parity verified) |
 
 ## Template
 

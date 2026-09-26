@@ -8,10 +8,10 @@ A new session resumes by reading `CLAUDE.md`, this file, `state.json` and
 
 | Item | Value |
 |---|---|
-| Phase | **3 — Search & discovery** (IN PROGRESS; Phase 2 DONE at Gate C) |
-| Slice | Phase 3 analysis → task graph (search index documents, market + compliance filtering, suggest, zero-result analytics) |
-| Branch | `main` includes Phase 2 (fast-forwarded after Gate C); Phase 3 work happens on `phase-3/search` |
-| Last green full gate | 2026-09-25 Phase 2 Gate C — Pest 1 298 tests on SQLite (7 247 assertions) and PostgreSQL (7 244), Pint clean, Larastan L7 0 errors, parity current, `types:check` / `check` / `build:ssr` green, prototype 137/137 |
+| Phase | **4 — Reviews, orders & purchase verification** (starting; Phases 2 and 3 DONE at Gate C) |
+| Slice | Phase 4 analysis → design `docs/architecture/phase-4-reviews-orders.md` → task graph |
+| Branch | `main` includes Phases 2 + 3 (fast-forwarded after each Gate C); Phase 4 work happens on `phase-4/reviews-orders` |
+| Last green full gate | 2026-09-26 Phase 3 Gate C — Pest 1 803 tests (1 792 passed, 11 Meilisearch skipped) on SQLite (9 675 assertions) and PostgreSQL (9 672), Pint clean, Larastan L7 0 errors, parity current, `types:check` / `check` / `build:ssr` exit 0, prototype 137/137 |
 | Next task | see `state.json → next_task` and [TASK-GRAPH.md](TASK-GRAPH.md) |
 
 ## Session start protocol

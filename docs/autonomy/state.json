@@ -1,23 +1,24 @@
 {
-    "updated_at": "2026-09-25",
-    "current_phase": "phase-3",
-    "current_slice": "search-and-discovery",
-    "branch": "phase-3/search",
+    "updated_at": "2026-09-26",
+    "current_phase": "phase-4",
+    "current_slice": "reviews-orders-verification",
+    "branch": "phase-4/reviews-orders",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "P3-02..P3-08, P3-10, P3-11 implemented; integration fixes cd15292 (cached Money, deterministic snapshot, lint exit code)",
-    "next_task": "P3-09 review council (security, architecture+QA, performance, frontend) -> fixes -> docs (ADR-0016, matrices) -> Gate C on SQLite + PostgreSQL -> merge phase-3/search into main -> Phase 4 (reviews, orders, purchase verification)",
+    "last_completed_task": "Phase 3 Gate C + merge into main (search & discovery, multi-currency correctness)",
+    "next_task": "P4-01 Phase 4 read-only analyses -> docs/architecture/phase-4-reviews-orders.md + TASK-GRAPH Phase 4",
     "blocked_tasks": [],
-    "active_agents": [
-        "Phase 3 review council: security, architecture+QA, performance, frontend"
-    ],
+    "active_agents": [],
     "last_full_test_result": {
-        "date": "2026-09-25",
-        "driver": "sqlite",
-        "tests": 1729,
-        "passed": 1718,
+        "date": "2026-09-26",
+        "driver": "sqlite + pgsql 18 (embedded)",
+        "tests": 1803,
+        "passed": 1792,
         "skipped": 11,
-        "assertions": 9381,
-        "result": "passed (Meilisearch contract cases skipped: no server)"
+        "assertions": {
+            "sqlite": 9675,
+            "pgsql": 9672
+        },
+        "result": "passed"
     },
     "static_analysis": {
         "pint": "passed",
@@ -25,9 +26,9 @@
         "larastan_errors": 0
     },
     "frontend": {
-        "types_check": "passed",
-        "lint": "passed (exit 0)",
-        "build_ssr": "passed"
+        "types_check": "exit 0",
+        "lint": "exit 0",
+        "build_ssr": "exit 0"
     },
     "parity_fixtures": "current",
     "prototype_integrity": {
@@ -41,6 +42,7 @@
     "phases_done": [
         "phase-0",
         "phase-1 (first slice)",
-        "phase-2"
+        "phase-2",
+        "phase-3"
     ]
 }

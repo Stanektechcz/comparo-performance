@@ -1,7 +1,7 @@
-# Feature matrix — prototype → Laravel (Phases 0–2)
+# Feature matrix — prototype → Laravel (Phases 0–3)
 
 Statuses: `NOT STARTED` · `IN PROGRESS` · `FUNCTIONAL` · `PARITY VERIFIED` · `PRODUCTION HARDENED`.
-Later phases (3+: purchase links/`/go`, review moderation, ranking lab, billing, live rooms, …) are all
+Later phases (4+: purchase links/`/go`, review moderation, ranking lab, billing, live rooms, …) are all
 `NOT STARTED` and out of this matrix's scope — see `docs/architecture/migration-roadmap.md`.
 
 | Prototype feature | Laravel route(s) | Backend service | Entity | Page | Tests | Status |
@@ -33,6 +33,10 @@ Later phases (3+: purchase links/`/go`, review moderation, ranking lab, billing,
 | **Merchant context switcher** | `merchant.context.update` | `ResolveMerchantContext` middleware | `merchant_user` | merchant portal header | `tests/Feature/Merchant/**` (isolation tests) | FUNCTIONAL |
 | Compliance hold on matched listings | (part of `MatchFeedItems`) | `Matching\Actions\ComplianceHolds` | `merchant_products.match_status=compliance_hold` | matching review pages | `tests/Feature/Matching/MatchListingTest.php` | FUNCTIONAL |
 | Price anomaly re-check after publish | (part of `PublishFeedRun`) | `Pricing\Actions\RecheckProductAnomalies` | `offers` (anomaly flags) | — | `tests/Feature/Feeds/FeedPublishingTest.php` (asserts anomaly flags) | FUNCTIONAL |
+| **Search & discovery (`/search`)** | `search`, `search.clicks`, `api.public.v1.search.suggest` | `Search\SearchService` (engine port), `Search\Engines\{DatabaseSearchEngine,MeilisearchSearchEngine}` | `search_documents` (local engine), Meilisearch indices (production) | `resources/js/pages/search/index.tsx`, header suggest combobox | `tests/Unit/Search/**`, `tests/Feature/Search/**`, `tests/Unit/Parity/{SearchParityTest,SearchSensitivityTest}.php`, `tests/Architecture/{SearchBoundariesTest,SearchJobsTest}.php` | `DatabaseSearchEngine` relevance: **PARITY VERIFIED**; overall module: FUNCTIONAL (see `docs/modules/search.md`) |
+| **Search indexing (outbox + rebuild)** | (job pipeline, `comparo:search:reindex`/`sync-settings` commands) | `Search\Indexing\{SearchOutbox,SearchOutboxProcessor}`, `Search\Jobs\{ProcessSearchOutbox,QueueFullSearchReindex,SyncSearchSettings}` | `search_index_outbox` | — | `tests/Feature/Search/{IndexingProcessorTest,IndexingTriggersTest,ReindexCommandTest,SyncSettingsCommandTest}.php` | FUNCTIONAL |
+| **Search analytics (zero-result demand, click attribution)** | `search.clicks` | `Search\Analytics\{RecordSearch,RecordSearchClick,AggregateSearchDemand,PruneSearchAnalytics}` | `search_queries`, `search_clicks`, `search_demand_daily` | — | `tests/Feature/Search/Analytics*Test.php` | FUNCTIONAL |
+| **Multi-currency total-price comparison** | (embedded in product page + search props) | `Pricing\Currency\{ExchangeRates,ComparisonRates}`, `Pricing\LandedPrice\MerchantTermsConverter` | `exchange_rates` | product page, search result cards | `tests/Unit/Pricing/**`, `tests/Feature/Search/IndexingMarketCurrencyTest.php` | FUNCTIONAL (single-currency paths remain **PARITY VERIFIED** — byte-identical to the prototype) |
 
 ## Later phases (all NOT STARTED)
 

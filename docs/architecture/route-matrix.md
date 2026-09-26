@@ -22,6 +22,8 @@ Inertia page's meta defaults, not a per-route override system (none exists yet).
 | GET | `/shops/{slug}` | `shops.show` | public | none | — | yes | index | FUNCTIONAL |
 | POST | `/market` | `market.update` | public | none (`throttle:30,1`) | — | writes the session market | n/a | FUNCTIONAL |
 | GET | `/.well-known/passkey-endpoints` | `well-known.passkeys` | public | none | — | no | noindex | FUNCTIONAL |
+| GET | `/search` | `search` | public | none | `throttle:search-page` (60/min per IP) | yes | noindex,follow | FUNCTIONAL |
+| POST | `/search/clicks` | `search.clicks` | public | none | `throttle:search-clicks` (60/min per IP); validated against the recorded search, always 204 | n/a | n/a | FUNCTIONAL |
 
 ## Authenticated user (settings)
 
@@ -88,6 +90,7 @@ requires `offers.manage`. Staff prefix is `/admin` (not `/staff`) per the open-d
 | Method | Path | Name | Surface | Auth | Notes | Status |
 |---|---|---|---|---|---|---|
 | GET | `api/public/v1/products/{slug}/offers` | `api.public.v1.products.offers` | public API | none | `throttle:public-api` named limiter | FUNCTIONAL |
+| GET | `api/public/v1/search/suggest` | `api.public.v1.search.suggest` | public API | none | `throttle:search-suggest` (120/min per IP); 2–64 char query, 60 s cache per market + normalised prefix | FUNCTIONAL |
 | GET | `api/merchant/v1/offers` | `api.merchant.v1.offers.index` | merchant API | `auth:sanctum` | `throttle:60,1` | FUNCTIONAL |
 | GET | `api/merchant/v1/offers/{offer}` | `api.merchant.v1.offers.show` | merchant API | `auth:sanctum` | `throttle:60,1` | FUNCTIONAL |
 | GET | `api/user` | `api.user` | internal | `auth:sanctum` | framework default | FUNCTIONAL |

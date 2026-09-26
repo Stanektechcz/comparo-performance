@@ -1,6 +1,6 @@
 # Module: Pricing
 
-Namespace `App\Domain\Pricing` (+ `App\Domain\Shared\Money`, `JsMath`). ADRs: 0003, 0009, 0010.
+Namespace `App\Domain\Pricing` (+ `App\Domain\Shared\Money`, `JsMath`). ADRs: 0003, 0009, 0010, 0017.
 
 ## Responsibilities
 
@@ -50,7 +50,28 @@ unverified, expired, invalid; `isUsable()`, `label()`), `PriceAnomaly` (too_low,
 | Free-shipping coupon | worth the zone rate only while the raw price is under the threshold |
 | Free-shipping threshold | tested against the coupon-reduced price for the row total |
 | Not shipping to market | `ships = false`, shipping 0, basis `not_shipping_to_market` |
-| Currency | shipping and fixed coupons must already be in the offer currency, else `InvalidArgumentException` |
+| Currency | shipping and fixed coupons must already be in the offer currency, else `InvalidArgumentException` — the pure calculator itself never converts; the query layer guarantees this (below) before it ever runs |
+
+## Multi-currency comparison (ADR-0017)
+
+A market's offers are usually all one currency (every prototype market), in which case nothing below
+changes anything — the single-currency path is byte-identical to the prototype and parity-proven. When a
+market genuinely mixes currencies, the **query layer** (`Offers\Queries\ProductOfferComparison`, not the
+pure calculators above) normalises before the pure code runs:
+
+| Layer | Currency handling |
+|---|---|
+| `Currency\ExchangeRates` (bound `scoped`, one per request/job) | Resolves the dated rate valid "now" from `exchange_rates`, memoised per (from, to, exact instant) for the request; a miss is never cached (another write in the same request could still supply it) |
+| `Currency\ComparisonRates` | A pure conversion table into one target currency, built once per request from `ExchangeRates`; `exactMinor()` (unrounded, bcmath) for comparisons, `convert()` (rounded half-away-from-zero) for calculator inputs; a currency with no known rate maps to `null` |
+| `LandedPrice\MerchantTermsConverter` | Converts a merchant's shipping-zone rate, free-shipping threshold and coupon amounts into the **offer's own** currency (never the comparison currency) before `LandedPriceCalculator` runs, so the pure calculator's "already in the offer currency" contract always holds. No known rate → the offer is excluded as `shipping_unavailable` (unknown shipping cost) or a fixed/minimum-order coupon is silently not applied (a percentage-only, no-minimum coupon needs no rate) |
+| `Pricing\MarketStats\MarketStatsCalculator` | Market baseline: single-currency listings use raw minor units unchanged; mixed listings are converted per-listing (free-shipping tested in the listing's own currency first) into the comparison currency, rate-less listings excluded from the baseline |
+| Ranking inputs, tie-breaks, `lowestTotal` | See ADR-0017: an unconvertible offer gets no price/shipping ranking advantage (A-29) but is never excluded from ranking itself; ties among mixed-currency offers compare exact (unrounded) comparison-currency amounts, never rounded ones |
+
+`comparo.comparison_currency` (EUR) is the one normalisation target; it is also what Phase 3 search
+sorting uses (`markets.{CC}.min_total_eur_minor` in the index) and what the public API's `meta.currency`
+reports. `meta.market_min_currency` is the offers' shared currency when they share one, EUR only when they
+do not (`Http\Presenters\OfferComparisonPresenter::forApi`). Cached comparison pages store scalars only
+(minor units + currency codes), never a `Money` or `ComparisonRates` object.
 
 ## Invariants
 
