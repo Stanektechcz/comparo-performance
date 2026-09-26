@@ -2,6 +2,7 @@
 
 namespace App\Domain\Search\Jobs;
 
+use App\Domain\Search\Indexing\IndexingBudget;
 use App\Domain\Search\Indexing\SearchOutboxProcessor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -13,12 +14,18 @@ use Illuminate\Support\Facades\Date;
 
 /**
  * Drains the search outbox, one batch of `comparo.search.indexing.batch`
- * rows per run ({@see SearchOutboxProcessor}), and dispatches itself again
+ * rows per run ({@see SearchOutboxProcessor}; products in units of
+ * `comparo.search.indexing.product_batch`), and dispatches itself again
  * while rows remain. Scheduled every minute (routes/console.php) for all
  * rows, priority first. Priority enqueues (compliance changes) dispatch a
  * `priorityOnly` copy immediately after commit, which drains only the
  * priority rows so a blocked product leaves the results without waiting for
  * the backlog.
+ *
+ * Time budget: a run starts no new unit of work after WORK_SECONDS and caps
+ * Meilisearch task waits to HARD_SECONDS, both below the 60 s timeout, so a
+ * slow batch ends itself (its remaining rows wait for the re-dispatched run)
+ * instead of being killed mid-write.
  *
  * Runs on the default connection (retry_after 90 s) on queue `search`; the
  * 60 s timeout stays below retry_after so a running batch is never handed to
@@ -34,6 +41,14 @@ final class ProcessSearchOutbox implements ShouldBeUniqueUntilProcessing, Should
     public const string LOCK = 'comparo:search:outbox';
 
     public const int DEFAULT_BATCH = 200;
+
+    public const int DEFAULT_PRODUCT_BATCH = 25;
+
+    /** No new unit of work starts after this many seconds of a run. */
+    public const int WORK_SECONDS = 40;
+
+    /** Engine task waits end by this many seconds into a run (below $timeout). */
+    public const int HARD_SECONDS = 50;
 
     public int $tries = 3;
 
@@ -75,6 +90,8 @@ final class ProcessSearchOutbox implements ShouldBeUniqueUntilProcessing, Should
             Date::now()->toImmutable(),
             max(1, (int) config('comparo.search.indexing.batch', self::DEFAULT_BATCH)),
             $this->priorityOnly,
+            IndexingBudget::start(self::WORK_SECONDS, self::HARD_SECONDS),
+            max(1, (int) config('comparo.search.indexing.product_batch', self::DEFAULT_PRODUCT_BATCH)),
         );
 
         if ($batch->hasMore) {

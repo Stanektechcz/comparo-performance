@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Search\Analytics\PublishSearchRecorded;
 use App\Domain\Search\Analytics\SessionHasher;
 use App\Domain\Search\Events\SearchResultClicked;
 use App\Models\SearchClick;
@@ -7,6 +8,7 @@ use App\Models\SearchQuery as SearchQueryRecord;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\Feature\Search\Support\SearchScenario;
 use Tests\Support\CatalogScenario;
@@ -155,4 +157,28 @@ it('attributes a click on a result of a real search page view', function () {
         ->assertNoContent();
 
     expect(SearchClick::query()->where('search_id', $props['searchId'])->sole()->entity_id)->toBe($product->id);
+});
+
+it('attributes a click right after the search even when no analytics worker has run yet', function () {
+    Carbon::setTestNow();
+    Queue::fake();
+    SearchScenario::useDatabaseEngine();
+    $scenario = CatalogScenario::create();
+    $product = $scenario->product(['name' => 'Kreatin Monohydrat']);
+    $scenario->allow($product);
+    $scenario->offer($product, $scenario->merchant(['DE' => 390]), 1990);
+    SearchScenario::reindexAll(Date::now()->toImmutable());
+
+    $searchId = $this->withCookie((string) config('session.cookie'), $this->session)
+        ->get(route('search', ['q' => 'kreatin']))
+        ->assertOk()
+        ->viewData('page')['props']['searchId'];
+
+    $this->withCredentials()
+        ->withCookie((string) config('session.cookie'), $this->session)
+        ->postJson(route('search.clicks'), ['search_id' => $searchId, 'entity_type' => 'product', 'entity_id' => $product->id, 'position' => 1])
+        ->assertNoContent();
+
+    Queue::assertPushedOn('analytics', PublishSearchRecorded::class);
+    expect(SearchClick::query()->where('search_id', $searchId)->sole()->entity_id)->toBe($product->id);
 });

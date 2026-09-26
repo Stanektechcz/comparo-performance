@@ -1,6 +1,8 @@
 <?php
 
 use App\Domain\Search\Jobs\ProcessSearchOutbox;
+use App\Domain\Search\Jobs\QueueFullSearchReindex;
+use App\Domain\Search\Jobs\SyncSearchSettings;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,29 +33,64 @@ arch('compliance events carry ids and scalars, never models')
     ->expect('App\Domain\Compliance\Events')
     ->not->toUse(['App\Models', 'Illuminate\Database']);
 
-it('bounds every search job and keeps its timeout below retry_after', function () {
+/**
+ * Every queued class of the Search context (jobs, analytics jobs, queued
+ * listeners), found by scanning app/Domain/Search recursively.
+ *
+ * @return list<class-string>
+ */
+function queuedSearchClasses(): array
+{
+    $root = dirname(__DIR__, 2).'/app/Domain/Search';
     $classes = [];
 
-    foreach (glob(dirname(__DIR__, 2).'/app/Domain/Search/Jobs/*.php') ?: [] as $file) {
-        $class = 'App\\Domain\\Search\\Jobs\\'.basename($file, '.php');
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $file) {
+        /** @var SplFileInfo $file */
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = substr($file->getPathname(), strlen($root) + 1, -strlen('.php'));
+        $class = 'App\\Domain\\Search\\'.str_replace(['/', '\\'], '\\', $relative);
+
+        if (class_exists($class) && is_subclass_of($class, ShouldQueue::class) && ! (new ReflectionClass($class))->isAbstract()) {
+            $classes[] = $class;
+        }
+    }
+
+    sort($classes);
+
+    return $classes;
+}
+
+it('bounds every queued search class and keeps its timeout below retry_after', function () {
+    $classes = queuedSearchClasses();
+
+    foreach ($classes as $class) {
         $reflection = new ReflectionClass($class);
-        $job = $reflection->newInstance();
+        // Jobs with message payloads are inspected without their constructor
+        // (declared property defaults still apply).
+        $job = ($reflection->getConstructor()?->getNumberOfRequiredParameters() ?? 0) === 0
+            ? $reflection->newInstance()
+            : $reflection->newInstanceWithoutConstructor();
+
+        expect($reflection->hasProperty('tries') && is_int($job->tries) && $job->tries >= 1)->toBeTrue("{$class} declares \$tries")
+            ->and($reflection->hasProperty('timeout') && is_int($job->timeout) && $job->timeout >= 1)->toBeTrue("{$class} declares \$timeout")
+            ->and($reflection->hasMethod('backoff') && $job->backoff() !== [])->toBeTrue("{$class} declares backoff()");
 
         foreach (['redis', 'database'] as $connection) {
             expect($job->timeout)->toBeLessThan((int) config("queue.connections.{$connection}.retry_after"), "{$class} times out before {$connection} re-delivers it");
         }
 
-        expect($reflection->hasProperty('tries') && is_int($job->tries) && $job->tries >= 1)->toBeTrue("{$class} declares \$tries")
-            ->and($reflection->hasProperty('timeout') && is_int($job->timeout) && $job->timeout >= 1)->toBeTrue("{$class} declares \$timeout")
-            ->and($reflection->hasMethod('backoff') && $job->backoff() !== [])->toBeTrue("{$class} declares backoff()")
-            ->and($job->queue)->toBe('search', "{$class} runs on the search queue")
-            ->and($job->connection)->toBeNull("{$class} uses the default connection")
-            ->and($job->uniqueId())->toBeString();
-
-        $classes[] = $class;
+        if (str_starts_with($class, 'App\\Domain\\Search\\Jobs\\')) {
+            expect($job->queue)->toBe('search', "{$class} runs on the search queue")
+                ->and($job->connection)->toBeNull("{$class} uses the default connection")
+                ->and($job->uniqueId())->toBeString();
+        }
     }
 
-    expect($classes)->toContain(ProcessSearchOutbox::class);
+    expect($classes)->toContain(ProcessSearchOutbox::class, QueueFullSearchReindex::class, SyncSearchSettings::class)
+        ->and(array_filter($classes, static fn (string $class): bool => str_starts_with($class, 'App\\Domain\\Search\\Analytics\\')))->not->toBeEmpty();
 });
 
 it('never lets two outbox runs overlap, and keys the waiting copies by mode', function () {

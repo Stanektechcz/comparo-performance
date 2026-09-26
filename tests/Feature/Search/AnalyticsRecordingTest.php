@@ -1,7 +1,7 @@
 <?php
 
+use App\Domain\Search\Analytics\PublishSearchRecorded;
 use App\Domain\Search\Analytics\SessionHasher;
-use App\Domain\Search\Analytics\StoreSearchQuery;
 use App\Domain\Search\Events\SearchPerformed;
 use App\Domain\Search\Events\ZeroResultSearchRecorded;
 use App\Models\SearchQuery as SearchQueryRecord;
@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -123,14 +124,30 @@ it('skips Inertia and browser prefetch requests', function (string $header) {
         ->and(SearchQueryRecord::query()->count())->toBe(0);
 })->with(['Inertia (Purpose)' => ['Purpose'], 'browser (Sec-Purpose)' => ['Sec-Purpose']]);
 
-it('queues the write on the analytics queue so the search never waits for it', function () {
+it('writes the row synchronously and queues only the events on the analytics queue', function () {
     recordingCatalog();
     Queue::fake();
+    Event::fake([SearchPerformed::class, ZeroResultSearchRecorded::class]);
 
     $searchId = $this->get(route('search', ['q' => 'kreatin']))->assertOk()->viewData('page')['props']['searchId'];
 
-    Queue::assertPushedOn('analytics', StoreSearchQuery::class, fn (StoreSearchQuery $job): bool => $job->searchId === $searchId);
-    expect(SearchQueryRecord::query()->count())->toBe(0);
+    expect(SearchQueryRecord::query()->sole()->search_id)->toBe($searchId);
+    Queue::assertPushedOn('analytics', PublishSearchRecorded::class, fn (PublishSearchRecorded $job): bool => $job->searchId === $searchId && $job->resultCount === 1);
+    Event::assertNotDispatched(SearchPerformed::class);
+});
+
+it('returns no search id and still renders the page when the analytics write fails', function () {
+    recordingCatalog();
+    Queue::fake();
+    Exceptions::fake();
+    SearchQueryRecord::creating(static fn (): never => throw new RuntimeException('analytics database unavailable'));
+
+    $props = $this->get(route('search', ['q' => 'kreatin']))->assertOk()->viewData('page')['props'];
+
+    expect($props['searchId'])->toBeNull()
+        ->and($props['results'])->toHaveCount(1);
+    Exceptions::assertReported(RuntimeException::class);
+    Queue::assertNothingPushed();
 });
 
 it('dispatches SearchPerformed and, without results, ZeroResultSearchRecorded', function () {
@@ -153,24 +170,24 @@ it('does not record texts under the searchable minimum', function () {
     expect(SearchQueryRecord::query()->count())->toBe(0);
 });
 
-it('writes each prepared row once even when the job is retried', function () {
-    $job = new StoreSearchQuery(
+it('bounds the analytics job and announces zero-result searches', function () {
+    Event::fake([SearchPerformed::class, ZeroResultSearchRecorded::class]);
+    $job = new PublishSearchRecorded(
         searchId: strtolower((string) Str::ulid()),
-        occurredAt: Date::now('UTC')->format(StoreSearchQuery::DATE_FORMAT),
         market: 'DE',
-        locale: 'de-DE',
         source: 'page',
-        queryNormalized: 'whey',
         queryHash: hash('sha256', 'whey'),
-        filters: null,
         resultCount: 0,
-        resultRefs: [],
-        sessionHash: null,
         isBot: false,
     );
 
     $job->handle();
-    $job->handle();
 
-    expect(SearchQueryRecord::query()->count())->toBe(1);
+    expect($job->tries)->toBe(3)
+        ->and($job->timeout)->toBeLessThan((int) config('queue.connections.database.retry_after'))
+        ->and($job->timeout)->toBeLessThan((int) config('queue.connections.redis.retry_after'))
+        ->and($job->backoff())->not->toBeEmpty();
+    Event::assertDispatched(SearchPerformed::class, fn (SearchPerformed $event): bool => $event->searchId === $job->searchId && $event->resultCount === 0);
+    Event::assertDispatched(ZeroResultSearchRecorded::class, fn (ZeroResultSearchRecorded $event): bool => $event->searchId === $job->searchId);
+    expect(SearchQueryRecord::query()->count())->toBe(0);
 });

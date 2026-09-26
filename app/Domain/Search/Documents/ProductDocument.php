@@ -18,6 +18,12 @@ final readonly class ProductDocument implements IndexDocument
     public const int SHORT_DESCRIPTION_LIMIT = 300;
 
     /**
+     * 2: `markets.{CC}.min_total_market_minor` (the price filter's
+     * market-currency amount; 1 filtered the offer-currency total).
+     */
+    public const int SCHEMA_VERSION = 2;
+
+    /**
      * @param  list<string>  $variantNames
      * @param  list<string>  $identifiers  product EAN, SKU and variant EANs
      * @param  list<string>  $brandAliases  non-rejected brand aliases

@@ -118,6 +118,13 @@ return [
             'queue' => 'search',
             // Outbox rows taken per ProcessSearchOutbox run (one bulk write per entity type).
             'batch' => 200,
+            // Products per indexing unit inside a run: each product runs one offer
+            // comparison per active market, so products get a smaller unit (the run
+            // stops taking units after ProcessSearchOutbox::WORK_SECONDS).
+            'product_batch' => 25,
+            // How long an in-progress full rebuild (comparo:search:reindex) keeps
+            // its dual-write marker when the command dies before cleaning up.
+            'rebuild_marker_ttl_seconds' => 21600,
             // Ids read and outbox rows written per statement when a merchant, brand,
             // category, ingredient or market change fans out to many products.
             'fan_out_chunk' => 500,

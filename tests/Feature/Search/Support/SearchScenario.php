@@ -6,9 +6,11 @@ use App\Domain\Platform\Markets\MarketResolver;
 use App\Domain\Platform\PrototypeImport\PrototypeSnapshotImporter;
 use App\Domain\Search\Console\SearchReindexer;
 use App\Domain\Search\Contracts\SearchIndex;
+use App\Domain\Search\Documents\ProductDocument;
 use App\Domain\Search\Engines\IndexNames;
 use App\Models\Country;
 use App\Models\SearchDocument;
+use Closure;
 use DateTimeImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -32,8 +34,8 @@ final class SearchScenario
 
     public const string MEILISEARCH_PREFIX = 'comparo_contract_';
 
-    /** @var ?list<array<string, mixed>> search_documents rows of the indexed demo (database engine) */
-    private static ?array $databaseRows = null;
+    /** @var array<string, list<array<string, mixed>>> fingerprint => search_documents rows of the indexed demo (database engine) */
+    private static array $databaseRows = [];
 
     private static ?DateTimeImmutable $anchor = null;
 
@@ -100,18 +102,22 @@ final class SearchScenario
     }
 
     /**
-     * The demo, fully indexed by the configured engine. The database engine
-     * only reads search_documents (and search_synonyms), so its rows are
-     * built once per process and re-inserted for later tests; Meilisearch
+     * The demo, fully indexed by the configured engine — and NOTHING else:
+     * every call leaves the same state, whichever test in the process calls
+     * it first. The catalogue is imported and indexed inside a savepoint
+     * that is rolled back afterwards, so tests see only the search documents
+     * (plus the migration-seeded synonyms, all the engines read), never the
+     * imported catalogue rows.
+     *
+     * The database engine's rows are built once per process per
+     * {@see self::fingerprint()} and re-inserted for every test; Meilisearch
      * keeps its indexes between tests and is reindexed once per process.
      */
     public static function indexedDemo(): DateTimeImmutable
     {
         if (config('scout.driver') === 'meilisearch') {
             if (! self::$meilisearchIndexed) {
-                $now = self::importDemo();
-                self::reindexAll($now);
-                self::$anchor ??= $now;
+                self::$anchor ??= self::buildAndRollBack(static fn (): null => null);
                 self::$meilisearchIndexed = true;
             }
 
@@ -120,22 +126,58 @@ final class SearchScenario
             return Carbon::now()->toImmutable();
         }
 
-        if (self::$databaseRows === null) {
-            $now = self::importDemo();
-            self::reindexAll($now);
-            self::$anchor = $now;
-            self::$databaseRows = array_map(static fn (object $row): array => (array) $row, DB::table('search_documents')->get()->all());
+        $fingerprint = self::fingerprint();
 
-            return $now;
+        if (! isset(self::$databaseRows[$fingerprint])) {
+            $rows = [];
+            $anchor = self::buildAndRollBack(static function () use (&$rows): void {
+                $rows = array_map(static fn (object $row): array => (array) $row, DB::table('search_documents')->get()->all());
+            });
+            self::$anchor ??= $anchor;
+            self::$databaseRows[$fingerprint] = $rows;
         }
 
-        foreach (array_chunk(self::$databaseRows, 100) as $chunk) {
+        DB::table('search_documents')->delete();
+
+        foreach (array_chunk(self::$databaseRows[$fingerprint], 100) as $chunk) {
             DB::table('search_documents')->insert($chunk);
         }
 
         Carbon::setTestNow(self::$anchor);
 
         return self::$anchor ?? Carbon::now()->toImmutable();
+    }
+
+    /**
+     * What the cached database rows depend on: the physical index names
+     * (driver prefix), the active markets and the product document schema.
+     */
+    private static function fingerprint(): string
+    {
+        return implode('|', [(string) config('scout.prefix'), implode(',', self::MARKETS), (string) ProductDocument::SCHEMA_VERSION]);
+    }
+
+    /**
+     * Imports and indexes the demo inside a savepoint, lets `$capture` read
+     * the result, then rolls the savepoint back (the engine's own storage
+     * outside the database — Meilisearch — keeps the documents).
+     *
+     * @param  Closure(): mixed  $capture
+     */
+    private static function buildAndRollBack(Closure $capture): DateTimeImmutable
+    {
+        DB::beginTransaction();
+
+        try {
+            $now = self::importDemo();
+            self::reindexAll($now);
+            $capture();
+        } finally {
+            DB::rollBack();
+            app(MarketResolver::class)->forget();
+        }
+
+        return $now;
     }
 
     /**

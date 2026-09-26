@@ -2,6 +2,7 @@
 
 namespace App\Domain\Search\Analytics;
 
+use App\Domain\Shared\Identifiers\Gtin;
 use App\Domain\Shared\Text\TextFold;
 
 /**
@@ -17,13 +18,19 @@ use App\Domain\Shared\Text\TextFold;
  *   `(030) 123 4567`, card-like `4111 1111 1111 1111`) with at least 7 digits
  *   becomes `[phone]` when it starts with `+`, `(` or `0` or has three or more
  *   groups;
- * - a single run of 7 or more digits becomes `[number]`, EXCEPT runs of
- *   exactly 8, 12, 13 or 14 digits: those are EAN-8 / UPC-A / EAN-13 / GTIN-14
- *   product identifiers, which visitors paste to find a product and which are
+ * - a single run of 7 or more digits becomes `[number]`, EXCEPT a run of
+ *   exactly 8, 12, 13 or 14 digits that passes the GS1 check digit
+ *   (Shared\Identifiers\Gtin): that is an EAN-8 / UPC-A / EAN-13 / GTIN-14
+ *   product identifier, which visitors paste to find a product and which is
  *   not personal data. A run with a leading `+` is always `[phone]`.
  *
- * Known trade-off: an 8-digit local phone number written without separators
- * is kept (it is indistinguishable from an EAN-8).
+ * Remaining trade-off (exact): a phone or other personal number written as
+ * ONE unseparated run of exactly 8, 12, 13 or 14 digits, without a leading
+ * `+`, whose last digit happens to equal the GS1 mod-10 check digit of the
+ * others is kept verbatim. For uniformly distributed digits that is 1 run in
+ * 10 of those lengths (e.g. an international number typed as `0049…` or
+ * `49…` without `+`); every other run of 7+ digits is redacted. Numbers
+ * written with separators, a `+` or brackets are always redacted as above.
  */
 final class QueryRedactor
 {
@@ -34,9 +41,6 @@ final class QueryRedactor
     public const string PHONE = '[phone]';
 
     public const string NUMBER = '[number]';
-
-    /** Digit-run lengths kept as product identifiers (EAN-8, UPC-A, EAN-13, GTIN-14). */
-    public const array IDENTIFIER_LENGTHS = [8, 12, 13, 14];
 
     private const int MIN_REDACTED_DIGITS = 7;
 
@@ -75,7 +79,7 @@ final class QueryRedactor
                 return self::PHONE;
             }
 
-            return $candidate === $digits && in_array($digitCount, self::IDENTIFIER_LENGTHS, true)
+            return $candidate === $digits && Gtin::isValid($digits)
                 ? $candidate
                 : self::NUMBER;
         }

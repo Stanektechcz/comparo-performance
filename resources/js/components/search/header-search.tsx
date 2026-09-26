@@ -312,7 +312,7 @@ export function HeaderSearch({ className }: { className?: string }) {
                                         }
                                         onClick={() => go(option.url)}
                                         className={cn(
-                                            'flex cursor-pointer flex-col rounded-btn px-2.5 py-2 text-[14px]',
+                                            'flex min-h-tap cursor-pointer flex-col justify-center rounded-btn px-2.5 py-2 text-[14px]',
                                             selected
                                                 ? 'bg-acc-tint text-text'
                                                 : 'text-text-2',

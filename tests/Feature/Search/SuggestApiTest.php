@@ -3,7 +3,10 @@
 use App\Domain\Compliance\ComplianceStatus;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Country;
 use App\Models\Ingredient;
+use App\Models\Product;
+use App\Models\ProductComplianceRule;
 use App\Models\SearchDocument;
 use App\Models\SearchQuery as SearchQueryRecord;
 use Illuminate\Support\Facades\Date;
@@ -127,4 +130,22 @@ it('limits suggestions to 120 requests per minute and IP', function () {
 
     $this->getJson($url)->assertTooManyRequests();
     $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.2'])->getJson($url)->assertOk();
+});
+
+it('drops cached suggestions when a product becomes blocked in the market', function () {
+    suggestCatalog();
+    $url = route('api.public.v1.search.suggest', ['q' => 'creatine']);
+
+    expect(collect($this->getJson($url)->json('data.products'))->pluck('slug')->all())->toBe(['creatine-pure']);
+
+    // The index is NOT refreshed (no outbox run): only the cache version and
+    // the live compliance re-check keep the blocked product out.
+    $pure = Product::query()->where('slug', 'creatine-pure')->sole();
+    ProductComplianceRule::query()
+        ->where('product_id', $pure->id)
+        ->where('country_id', Country::query()->where('code', 'DE')->value('id'))
+        ->sole()
+        ->update(['status' => ComplianceStatus::NotAllowed]);
+
+    expect(collect($this->getJson($url)->json('data.products'))->pluck('slug')->all())->toBe([]);
 });

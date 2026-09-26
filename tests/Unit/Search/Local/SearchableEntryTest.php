@@ -17,7 +17,7 @@ it('rejects texts that do not belong to the entry type', function (Closure $buil
 it('rejects inconsistent market and rating attributes', function (Closure $build) {
     $build();
 })->throws(InvalidArgumentException::class)->with([
-    'blocked with a price' => [fn () => new MarketAttributes(ComplianceStatus::NotAllowed, minTotalMinor: 1990)],
+    'blocked with a price' => [fn () => new MarketAttributes(ComplianceStatus::NotAllowed, minTotalMarketMinor: 1990)],
     'blocked and purchasable' => [fn () => new MarketAttributes(ComplianceStatus::PrescriptionOnly, purchasable: true)],
     'unknown and purchasable' => [fn () => new MarketAttributes(ComplianceStatus::Unknown, purchasable: true)],
     'negative total' => [fn () => new MarketAttributes(ComplianceStatus::Allowed, minTotalEurMinor: -1)],
@@ -27,8 +27,8 @@ it('rejects inconsistent market and rating attributes', function (Closure $build
 ]);
 
 it('keeps informational totals for unknown compliance', function () {
-    $state = new MarketAttributes(ComplianceStatus::Unknown, minTotalMinor: 1990, minTotalEurMinor: 1990);
+    $state = new MarketAttributes(ComplianceStatus::Unknown, minTotalMarketMinor: 1990, minTotalEurMinor: 1990);
 
     expect($state->purchasable)->toBeFalse()
-        ->and($state->minTotalMinor)->toBe(1990);
+        ->and($state->minTotalMarketMinor)->toBe(1990);
 });

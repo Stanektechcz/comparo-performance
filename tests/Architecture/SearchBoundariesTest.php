@@ -23,20 +23,26 @@ use Tests\Feature\Search\Support\CommercialTerms;
  * every subject violates (verified with a planted violation on 2026-09-25,
  * see tests/Architecture/PureServicesTest.php and FeedJobsTest.php).
  */
-foreach ([
+$searchNamespaces = [
     'App\Domain\Search',
+    'App\Domain\Search\Analytics',
     'App\Domain\Search\Console',
     'App\Domain\Search\Contracts',
     'App\Domain\Search\Documents',
     'App\Domain\Search\Engines',
+    'App\Domain\Search\Events',
     'App\Domain\Search\Facets',
     'App\Domain\Search\Indexing',
+    'App\Domain\Search\Jobs',
+    'App\Domain\Search\Listeners',
     'App\Domain\Search\Local',
     'App\Domain\Search\Queries',
     'App\Domain\Search\Query',
     'App\Domain\Search\Relevance',
     'App\Domain\Search\Settings',
-] as $searchNamespace) {
+];
+
+foreach ($searchNamespaces as $searchNamespace) {
     arch("{$searchNamespace} never reads commercial, affiliate or feed data and is never reached directly from HTTP")
         ->expect($searchNamespace)
         ->not->toUse([
@@ -46,6 +52,15 @@ foreach ([
             'App\Http',
         ]);
 }
+
+it('checks the boundary of every Search sub-namespace', function () use ($searchNamespaces) {
+    $directories = array_map(
+        static fn (string $directory): string => 'App\Domain\Search\\'.basename($directory),
+        glob(dirname(__DIR__, 2).'/app/Domain/Search/*', GLOB_ONLYDIR) ?: [],
+    );
+
+    expect(array_values(array_diff($directories, $searchNamespaces)))->toBe([]);
+});
 
 /*
  * Documents are built only by builders (docs/architecture/phase-3-search.md

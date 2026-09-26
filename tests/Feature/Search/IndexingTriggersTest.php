@@ -5,8 +5,10 @@ use App\Domain\Offers\Events\OfferDeactivated;
 use App\Domain\Offers\Events\OfferPublished;
 use App\Domain\Offers\Events\OfferRelinked;
 use App\Domain\Pricing\Events\PriceChanged;
+use App\Domain\Search\Indexing\CatalogIndexTriggers;
 use App\Domain\Search\Jobs\ProcessSearchOutbox;
 use App\Domain\Search\Jobs\QueueFullSearchReindex;
+use App\Domain\Search\Jobs\SyncSearchSettings;
 use App\Models\Brand;
 use App\Models\BrandAlias;
 use App\Models\Category;
@@ -20,8 +22,10 @@ use App\Models\MerchantTrustSignal;
 use App\Models\Offer;
 use App\Models\Product;
 use App\Models\SearchIndexOutbox;
+use App\Models\SearchSynonym;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\CatalogScenario;
 
 /**
@@ -178,6 +182,56 @@ it('ignores a merchant saved without changes', function () {
     expect(outboxEntries())->toBe([]);
 });
 
+it('queues the merchant document and its products only for columns that affect product documents', function (array $change) {
+    ['merchant' => $merchant, 'expected' => $expected] = merchantWithOffers();
+
+    $merchant->update($change);
+
+    expect(outboxEntries())->toBe($expected);
+})->with([
+    'status' => [['status' => 'suspended']],
+    'verification' => [['verified_at' => null]],
+    'rating average' => [['rating_average' => 3.10]],
+    'rating count' => [['rating_count' => 99]],
+    'weighted rating' => [['weighted_rating' => 2.5]],
+    'currency' => [['currency' => 'CZK']],
+    'free shipping threshold' => [['free_shipping_threshold_minor' => 9900]],
+]);
+
+it('queues only the merchant document for its own public fields', function (array $change) {
+    ['merchant' => $merchant] = merchantWithOffers();
+
+    $merchant->update($change);
+
+    expect(outboxEntries())->toBe(["merchant:{$merchant->id}"]);
+})->with([
+    'name' => [['name' => 'Renamed shop']],
+    'slug' => [['slug' => 'renamed-shop']],
+    'website' => [['website' => 'https://renamed.example']],
+]);
+
+it('ignores merchant columns that no search document shows', function (array $change) {
+    ['merchant' => $merchant] = merchantWithOffers();
+
+    $merchant->update($change);
+
+    expect(outboxEntries())->toBe([]);
+})->with([
+    'description' => [['description' => 'A new shop description.']],
+    'return days' => [['return_days' => 60]],
+    'home country' => [['home_country_code' => 'AT']],
+    'rating source' => [['rating_source' => 'manual']],
+]);
+
+it('covers every merchant column in exactly one trigger list', function () {
+    $columns = Schema::getColumnListing('merchants');
+    $listed = [...CatalogIndexTriggers::MERCHANT_PRODUCT_COLUMNS, ...CatalogIndexTriggers::MERCHANT_DOCUMENT_COLUMNS, ...CatalogIndexTriggers::MERCHANT_IGNORED];
+    sort($columns);
+    sort($listed);
+
+    expect($listed)->toBe($columns);
+});
+
 it('reads the merchant fan-out in bounded, id-ordered chunks', function () {
     config(['comparo.search.indexing.fan_out_chunk' => 2]);
     $catalog = CatalogScenario::create();
@@ -196,7 +250,7 @@ it('reads the merchant fan-out in bounded, id-ordered chunks', function () {
         }
     });
 
-    $merchant->update(['name' => 'Renamed shop']);
+    $merchant->update(['free_shipping_threshold_minor' => 9900]);
 
     expect($offerReads)->toHaveCount(3)
         ->and($offerReads)->each->toContain('limit 2')
@@ -352,4 +406,27 @@ it('queues the product of a directly written offer, and the previous product whe
     clearOutbox();
     $offer->update(['product_id' => $other->id]);
     expect(outboxEntries())->toBe(["product:{$product->id}", "product:{$other->id}"]);
+});
+
+it('re-applies index settings after a synonym edit', function (Closure $edit) {
+    $synonym = SearchSynonym::query()->where('term', 'kreatin')->sole();
+    Queue::fake([SyncSearchSettings::class]);
+
+    $edit($synonym);
+
+    // Unique until processing: one waiting copy per burst of edits.
+    Queue::assertPushed(SyncSearchSettings::class, fn (SyncSearchSettings $job): bool => $job->queue === 'search');
+})->with([
+    'created' => [fn () => SearchSynonym::factory()->create()],
+    'disabled' => [fn (SearchSynonym $synonym) => $synonym->update(['status' => 'disabled'])],
+    'deleted' => [fn (SearchSynonym $synonym) => $synonym->delete()],
+]);
+
+it('does not sync settings for a synonym saved without changes', function () {
+    $synonym = SearchSynonym::query()->where('term', 'kreatin')->sole();
+    Queue::fake([SyncSearchSettings::class]);
+
+    $synonym->save();
+
+    Queue::assertNotPushed(SyncSearchSettings::class);
 });

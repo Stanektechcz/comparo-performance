@@ -13,6 +13,8 @@ use App\Domain\Search\Contracts\SearchHit;
 use App\Domain\Search\Contracts\SearchIndex;
 use App\Domain\Search\Contracts\SearchResults;
 use App\Domain\Search\Contracts\SuggestResults;
+use App\Domain\Search\Engines\TaskWaitCap;
+use App\Domain\Search\Indexing\IndexingBudget;
 use App\Domain\Search\Indexing\SearchOutbox;
 use App\Domain\Search\Indexing\SearchOutboxProcessor;
 use App\Domain\Search\Jobs\ProcessSearchOutbox;
@@ -293,4 +295,62 @@ it('re-applies settings and queues every document source for a full reindex', fu
         ->and(remainingOutbox())->not->toContain("product:{$retired->id}");
     Queue::assertPushed(ProcessSearchOutbox::class, fn (ProcessSearchOutbox $job): bool => ! $job->priorityOnly);
     $this->artisan('comparo:search:sync-settings')->expectsOutputToContain('unchanged')->doesntExpectOutputToContain('applied');
+});
+
+it('stops taking entity chunks once the work budget is spent and leaves the rest for the next run', function () {
+    config(['comparo.search.indexing.product_batch' => 1]);
+    $catalog = CatalogScenario::create();
+    $products = array_map(fn () => $catalog->product(), range(1, 3));
+    SearchIndexOutbox::query()->delete();
+    app(SearchOutbox::class)->enqueue(SearchEntityType::Product, array_map(static fn (Product $product): int => $product->id, $products));
+
+    // A fake monotonic clock: the run starts at 0 s (work budget 40 s, hard
+    // budget 50 s); 35 s have passed when it takes its first chunk, and
+    // indexing that chunk takes the clock past the work budget.
+    $seconds = 0.0;
+    $budget = IndexingBudget::start(40, 50, function () use (&$seconds): float {
+        return $seconds;
+    });
+    $seconds = 35.0;
+    $waitCaps = [];
+    interceptUpserts('products', function () use (&$seconds, &$waitCaps) {
+        $waitCaps[] = app(TaskWaitCap::class)->timeoutMs(30_000);
+        $seconds = 41.0;
+    });
+
+    $batch = app(SearchOutboxProcessor::class)->process(now()->toImmutable(), 200, budget: $budget, productBatch: 1);
+
+    expect($batch->processed)->toBe(1)
+        ->and($batch->hasMore)->toBeTrue()
+        ->and($waitCaps)->toBe([15_000])
+        ->and(remainingOutbox())->toBe(["product:{$products[1]->id}", "product:{$products[2]->id}"])
+        ->and(app(TaskWaitCap::class)->timeoutMs(30_000))->toBe(30_000);
+});
+
+it('indexes products in smaller chunks than other entities within one run', function () {
+    config(['comparo.search.indexing.product_batch' => 2]);
+    $catalog = CatalogScenario::create();
+    $products = array_map(fn () => $catalog->product(), range(1, 5));
+    SearchIndexOutbox::query()->delete();
+    app(SearchOutbox::class)->enqueue(SearchEntityType::Product, array_map(static fn (Product $product): int => $product->id, $products));
+    app(SearchOutbox::class)->enqueue(SearchEntityType::Brand, [$products[0]->brand_id, $products[1]->brand_id]);
+    $writes = ['products' => 0, 'brands' => 0];
+    interceptUpserts('products', function () use (&$writes) {
+        $writes['products']++;
+    });
+
+    Queue::fake([ProcessSearchOutbox::class]);
+    drainOutbox();
+
+    expect($writes['products'])->toBe(3)
+        ->and(remainingOutbox())->toBe([])
+        ->and(SearchDocument::query()->where('index_name', 'products')->count())->toBe(5);
+    Queue::assertNotPushed(ProcessSearchOutbox::class);
+});
+
+it('runs the outbox with a time budget below its timeout and a smaller product batch', function () {
+    expect(ProcessSearchOutbox::WORK_SECONDS)->toBeLessThan(ProcessSearchOutbox::HARD_SECONDS)
+        ->and(ProcessSearchOutbox::HARD_SECONDS)->toBeLessThan((new ProcessSearchOutbox)->timeout)
+        ->and((int) config('comparo.search.indexing.product_batch'))->toBe(25)
+        ->and((int) config('comparo.search.indexing.product_batch'))->toBeLessThan((int) config('comparo.search.indexing.batch'));
 });

@@ -48,8 +48,9 @@ function ResultLink({
 
 /**
  * Product result: the lowest landed total for the market from the live
- * comparison. `unknown` compliance shows the total as information only.
- * There is never a buy button in search results.
+ * comparison. `unknown` compliance shows the total as information only
+ * (the badge appears only when there is a total to qualify). There is
+ * never a buy button in search results.
  */
 function ProductRow({
     result,
@@ -103,7 +104,7 @@ function ProductRow({
                         {product.offerCount}{' '}
                         {pluralize(product.offerCount, 'offer')}
                     </p>
-                ) : (
+                ) : product.lowestTotal ? (
                     <Badge
                         tone="warn"
                         className="mt-1.5"
@@ -111,7 +112,7 @@ function ProductRow({
                     >
                         Price information only
                     </Badge>
-                )}
+                ) : null}
             </div>
         </article>
     );

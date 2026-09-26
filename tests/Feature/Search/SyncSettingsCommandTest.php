@@ -47,7 +47,7 @@ function appliedSettings(FakeMeilisearchHttp $http): array
 it('validates settings on the database engine and applies them only when they change', function () {
     $this->artisan('comparo:search:sync-settings')
         ->expectsTable(['Index', 'Version', 'Status'], [
-            ['products', 1, 'applied'],
+            ['products', ProductIndexSettings::VERSION, 'applied'],
             ['brands', 1, 'applied'],
             ['merchants', 1, 'applied'],
             ['categories', 1, 'applied'],
@@ -68,7 +68,8 @@ it('pushes the product settings with per-market attributes, typo rules and synon
 
     expect(array_keys(appliedSettings($http)))->toBe(['test_products', 'test_brands', 'test_merchants', 'test_categories', 'test_ingredients'])
         ->and($products['searchableAttributes'])->toBe(['name', 'brand.name', 'brand_aliases', 'ingredient_names', 'category.name', 'variant_names', 'identifiers'])
-        ->and($products['filterableAttributes'])->toContain('blocked_markets', 'brand.slug', 'category.path', 'ingredients', 'markets.CZ.compliance', 'markets.DE.in_stock', 'markets.DE.min_total_minor')
+        ->and($products['filterableAttributes'])->toContain('blocked_markets', 'brand.slug', 'category.path', 'ingredients', 'markets.CZ.compliance', 'markets.DE.in_stock', 'markets.DE.min_total_market_minor', 'markets.DE.min_total_eur_minor')
+        ->and($products['filterableAttributes'])->not->toContain('markets.DE.min_total_minor')
         ->and($products['sortableAttributes'])->toBe(['name', 'rating.average', 'rating.count', 'markets.CZ.min_total_eur_minor', 'markets.DE.min_total_eur_minor'])
         ->and($products['typoTolerance'])->toBe(['enabled' => true, 'minWordSizeForTypos' => ['oneTypo' => 3, 'twoTypos' => 6], 'disableOnAttributes' => ['identifiers']])
         ->and($products['synonyms']['kreatin'])->toBe(['creatine', 'monohydrate', 'creapure'])

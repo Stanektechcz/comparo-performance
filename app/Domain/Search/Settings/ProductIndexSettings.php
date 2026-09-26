@@ -9,10 +9,14 @@ use App\Domain\Search\Contracts\SearchIndex;
  * Per-market attributes are declared explicitly for every active market
  * (`markets.DE.min_total_eur_minor`, …), so activating a country changes
  * the fingerprint and requires a settings sync plus a full reindex (A-22).
+ *
+ * Version 2: the price filter reads `markets.{CC}.min_total_market_minor`
+ * (market-currency amount); `min_total_minor` (offer currency, display only)
+ * is no longer filterable.
  */
 final readonly class ProductIndexSettings implements IndexSettings
 {
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     public const array SEARCHABLE = [
         'name',
@@ -36,7 +40,7 @@ final readonly class ProductIndexSettings implements IndexSettings
     ];
 
     /** Per active market: `markets.{CC}.{field}`. */
-    public const array MARKET_FILTERABLE = ['compliance', 'in_stock', 'min_total_minor', 'min_total_eur_minor'];
+    public const array MARKET_FILTERABLE = ['compliance', 'in_stock', 'min_total_market_minor', 'min_total_eur_minor'];
 
     public const array SORTABLE = ['name', 'rating.average', 'rating.count'];
 

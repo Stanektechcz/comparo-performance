@@ -16,9 +16,11 @@ use App\Domain\Platform\Cache\CatalogCacheVersion;
 use App\Domain\Platform\Listeners\BumpProductCacheVersion;
 use App\Domain\Platform\Markets\MarketResolver;
 use App\Domain\Platform\Queues\LongRunningQueue;
+use App\Domain\Pricing\Currency\ExchangeRates;
 use App\Domain\Pricing\Events\PriceChanged;
 use App\Domain\Search\Indexing\CatalogIndexTriggers;
 use App\Domain\Search\Indexing\Listeners\EnqueueProductDocuments;
+use App\Domain\Search\Listeners\InvalidateCachedSuggestions;
 use App\Models\Brand;
 use App\Models\BrandAlias;
 use App\Models\Category;
@@ -52,6 +54,12 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->registerFeedFetcher();
+
+        // Scoped (not singleton): one instance per HTTP request or queued
+        // job, so its per-request rate memo (ExchangeRates::$memo) is shared
+        // across a results page's product cards but never carried over to
+        // the next job on a persistent queue worker.
+        $this->app->scoped(ExchangeRates::class);
     }
 
     /**
@@ -80,6 +88,14 @@ class AppServiceProvider extends ServiceProvider
         $this->registerDomainListeners();
         $this->queueSearchIndexingOnChange();
         $this->guardLongRunningQueue();
+
+        // Scoped bindings (ExchangeRates) already reset per queued job
+        // (Illuminate\Queue\QueueServiceProvider). Outside a queue worker a
+        // web request gets a fresh process anyway, but the test suite calls
+        // several requests through one long-lived container: without this,
+        // a scoped instance's memo (and its stale rate lookups) would leak
+        // from one test HTTP call into the next.
+        $this->app->terminating(fn () => $this->app->forgetScopedInstances());
     }
 
     /**
@@ -244,6 +260,7 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Event::listen(ComplianceRuleChanged::class, EnqueueProductDocuments::class);
+        Event::listen(ComplianceRuleChanged::class, InvalidateCachedSuggestions::class);
 
         // A listing linked outside a feed run publishes its latest feed observation.
         Event::listen(ProductMatched::class, PublishLatestObservation::class);

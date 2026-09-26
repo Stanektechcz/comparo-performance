@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/react';
 import { SlidersHorizontal } from 'lucide-react';
-import type { FormEvent } from 'react';
-import { useId, useState } from 'react';
+import type { FormEvent, RefObject } from 'react';
+import { useId, useRef, useState } from 'react';
 import { buttonStyles, selectStyles } from '@/components/comparo/button-styles';
 import { searchUrl } from '@/components/search/search-url';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,106 @@ const VISIBLE_OPTIONS = 12;
 type FacetKey = 'brand' | 'category' | 'ingredient';
 
 const inputStyles =
-    'min-h-10 w-full min-w-0 rounded-field border border-line-2 bg-field px-3 text-[13px] text-text';
+    'min-h-10 w-full min-w-0 rounded-field border border-line-2 bg-field px-3 text-[13px] text-text aria-invalid:border-danger-2';
+
+/** Mirrors SearchRequest::MAX_PRICE (whole currency units). */
+const MAX_PRICE = 100_000;
+
+const WHOLE_NUMBER = /^\d+$/;
+
+type PriceCheck = { value: number | null; error: string | null };
+
+/**
+ * A price bound in WHOLE currency units (the server multiplies by 100):
+ * empty means "no bound"; anything but digits (a minus sign, decimals,
+ * letters) is an error shown next to the field, never silently dropped.
+ */
+function checkPrice(raw: string, currency: string): PriceCheck {
+    const text = raw.trim();
+
+    if (text === '') {
+        return { value: null, error: null };
+    }
+
+    if (!WHOLE_NUMBER.test(text)) {
+        return {
+            value: null,
+            error: `Enter a whole number of ${currency}, without decimals or a minus sign.`,
+        };
+    }
+
+    const value = Number.parseInt(text, 10);
+
+    return value > MAX_PRICE
+        ? { value: null, error: `Enter at most ${MAX_PRICE} ${currency}.` }
+        : { value, error: null };
+}
+
+function checkPriceRange(
+    rawMin: string,
+    rawMax: string,
+    currency: string,
+): { min: PriceCheck; max: PriceCheck } {
+    const min = checkPrice(rawMin, currency);
+    const max = checkPrice(rawMax, currency);
+
+    if (min.value !== null && max.value !== null && max.value < min.value) {
+        return {
+            min,
+            max: { value: null, error: 'Must be at least the “From” amount.' },
+        };
+    }
+
+    return { min, max };
+}
+
+function PriceInput({
+    id,
+    label,
+    value,
+    error,
+    hintId,
+    inputRef,
+    onChange,
+}: {
+    id: string;
+    label: string;
+    value: string;
+    error: string | null;
+    hintId: string;
+    inputRef: RefObject<HTMLInputElement | null>;
+    onChange: (value: string) => void;
+}) {
+    const errorId = `${id}-error`;
+
+    return (
+        <div className="min-w-0">
+            <label htmlFor={id} className="text-xs text-text-3">
+                {label}
+            </label>
+            <input
+                ref={inputRef}
+                id={id}
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+                className={cn(inputStyles, 'mt-1')}
+            />
+            {error ? (
+                <p
+                    id={errorId}
+                    className="mt-1 text-[12px] font-semibold text-danger-2"
+                >
+                    {error}
+                </p>
+            ) : null}
+        </div>
+    );
+}
 
 function visit(url: string) {
     router.get(url, {}, { preserveScroll: true });
@@ -54,8 +153,8 @@ function FacetGroup({
             </legend>
             <ul className="mt-2 flex flex-col gap-0.5">
                 {shown.map((option) => (
-                    <li key={option.value}>
-                        <label className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-btn px-1.5 text-[13px] text-text-2 hover:bg-surface-3">
+                    <li key={option.value} className="flex min-h-tap">
+                        <label className="flex min-h-9 flex-1 cursor-pointer items-center gap-2.5 rounded-btn px-1.5 text-[13px] text-text-2 hover:bg-surface-3">
                             <input
                                 type="checkbox"
                                 checked={option.selected}
@@ -99,6 +198,11 @@ function FacetGroup({
  * Facet, price, stock and rating filters. Checkboxes apply at once; the
  * price range and rating apply with the button. Below `lg` the panel is a
  * disclosure so results stay first on small screens.
+ *
+ * The price and rating fields are local state seeded from `criteria`: the
+ * page keys this component on the server-confirmed values, so it remounts
+ * with fresh values after every visit that changes them (e.g. "Clear all
+ * filters").
  */
 export function SearchFilters({
     criteria,
@@ -128,19 +232,25 @@ export function SearchFilters({
         (criteria.in_stock ? 1 : 0) +
         (criteria.min_rating !== null ? 1 : 0);
 
-    const toNumber = (value: string): number | null => {
-        const parsed = Number.parseInt(value, 10);
-
-        return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-    };
+    const priceMinRef = useRef<HTMLInputElement>(null);
+    const priceMaxRef = useRef<HTMLInputElement>(null);
+    const prices = checkPriceRange(priceMin, priceMax, priceCurrency);
+    const priceHintId = `${id}-price-hint`;
 
     const apply = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+
+        if (prices.min.error || prices.max.error) {
+            (prices.min.error ? priceMinRef : priceMaxRef).current?.focus();
+
+            return;
+        }
+
         visit(
             searchUrl(criteria, {
-                price_min: toNumber(priceMin),
-                price_max: toNumber(priceMax),
-                min_rating: toNumber(minRating),
+                price_min: prices.min.value,
+                price_max: prices.max.value,
+                min_rating: minRating === '' ? null : Number(minRating),
             }),
         );
     };
@@ -188,54 +298,49 @@ export function SearchFilters({
                     <legend className="text-xs font-extrabold tracking-[0.06em] text-text-2 uppercase">
                         Lowest total ({priceCurrency})
                     </legend>
+                    <p id={priceHintId} className="mt-1 text-xs text-text-3">
+                        Whole {priceCurrency}, including shipping.
+                    </p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                        <label className="text-xs text-text-3">
-                            From
-                            <input
-                                type="number"
-                                inputMode="numeric"
-                                min={0}
-                                step={1}
-                                value={priceMin}
-                                onChange={(event) =>
-                                    setPriceMin(event.target.value)
-                                }
-                                className={cn(inputStyles, 'mt-1')}
-                            />
-                        </label>
-                        <label className="text-xs text-text-3">
-                            To
-                            <input
-                                type="number"
-                                inputMode="numeric"
-                                min={0}
-                                step={1}
-                                value={priceMax}
-                                onChange={(event) =>
-                                    setPriceMax(event.target.value)
-                                }
-                                className={cn(inputStyles, 'mt-1')}
-                            />
-                        </label>
+                        <PriceInput
+                            id={`${id}-price-min`}
+                            label="From"
+                            value={priceMin}
+                            error={prices.min.error}
+                            hintId={priceHintId}
+                            inputRef={priceMinRef}
+                            onChange={setPriceMin}
+                        />
+                        <PriceInput
+                            id={`${id}-price-max`}
+                            label="To"
+                            value={priceMax}
+                            error={prices.max.error}
+                            hintId={priceHintId}
+                            inputRef={priceMaxRef}
+                            onChange={setPriceMax}
+                        />
                     </div>
                 </fieldset>
                 <fieldset className="border-t border-line-soft pt-3">
                     <legend className="sr-only">Availability and rating</legend>
-                    <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-[13px] text-text-2">
-                        <input
-                            type="checkbox"
-                            checked={criteria.in_stock}
-                            onChange={(event) =>
-                                visit(
-                                    searchUrl(criteria, {
-                                        in_stock: event.target.checked,
-                                    }),
-                                )
-                            }
-                            className="size-4 accent-[var(--acc)]"
-                        />
-                        In stock only
-                    </label>
+                    <div className="flex min-h-tap">
+                        <label className="flex min-h-9 flex-1 cursor-pointer items-center gap-2.5 text-[13px] text-text-2">
+                            <input
+                                type="checkbox"
+                                checked={criteria.in_stock}
+                                onChange={(event) =>
+                                    visit(
+                                        searchUrl(criteria, {
+                                            in_stock: event.target.checked,
+                                        }),
+                                    )
+                                }
+                                className="size-4 accent-[var(--acc)]"
+                            />
+                            In stock only
+                        </label>
+                    </div>
                     <label
                         htmlFor={`${id}-rating`}
                         className="mt-2 block text-xs text-text-3"

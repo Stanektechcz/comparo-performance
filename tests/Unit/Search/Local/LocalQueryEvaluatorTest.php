@@ -28,7 +28,7 @@ function wheyProduct(int $id, string $name, ?int $totalMinor, ?float $rating = n
         markets: ['DE' => new MarketAttributes(
             compliance: $compliance,
             purchasable: $compliance->isPurchasable(),
-            minTotalMinor: $blocked ? null : $totalMinor,
+            minTotalMarketMinor: $blocked ? null : $totalMinor,
             minTotalEurMinor: $blocked ? null : $totalMinor,
             inStock: ! $blocked && $inStock,
         )],

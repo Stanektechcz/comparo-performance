@@ -7,8 +7,12 @@ use App\Domain\Search\Contracts\SearchIndex;
 use App\Domain\Search\Contracts\SearchResults;
 use App\Domain\Search\Contracts\SpellingSuggestion;
 use App\Domain\Search\Contracts\SuggestItem;
+use App\Domain\Search\Engines\DatabaseSearchEngine;
 use App\Domain\Search\Engines\MeilisearchFilters;
+use App\Domain\Search\Engines\MeilisearchSearchEngine;
 use App\Domain\Search\Engines\SearchEngineException;
+use App\Domain\Search\Engines\TaskWaitCap;
+use App\Domain\Search\Indexing\IndexingBudget;
 use App\Domain\Search\Local\SearchableType;
 use App\Domain\Search\Query\SearchFilters;
 use App\Domain\Search\Query\SearchQuery;
@@ -16,8 +20,12 @@ use App\Domain\Search\Query\SortOption;
 use App\Domain\Search\SearchEntityType;
 use App\Domain\Search\SearchService;
 use App\Domain\Shared\Text\TextFold;
+use App\Models\Country;
+use App\Models\Product;
+use App\Models\SearchDocument as SearchDocumentRecord;
 use Illuminate\Support\Carbon;
 use Meilisearch\Client;
+use Meilisearch\Exceptions\ApiException;
 use Tests\Feature\Search\Support\FakeMeilisearchHttp;
 use Tests\Feature\Search\Support\SearchScenario;
 
@@ -126,14 +134,20 @@ it('shows only merchants that ship to the market (A-28)', function (string $engi
         ->and($britain->facets->typeCounts['shop'])->toBe(1);
 })->with('engines');
 
-it('returns nothing for nonsense, with a did-you-mean list', function (string $engine) {
+it('returns nothing for nonsense, with an engine-specific did-you-mean list', function (string $engine) {
     $search = contractEngine($engine);
     $results = $search->search(new SearchQuery('qwxzvbnm', 'DE'));
 
     expect($results->total)->toBe(0)
         ->and($results->hits)->toBe([])
-        ->and($results->facets->typeCounts)->toBe(['all' => 0, 'product' => 0, 'brand' => 0, 'shop' => 0, 'category' => 0, 'ingredient' => 0])
-        ->and($results->didYouMean)->toBeArray()->toContainOnlyInstancesOf(SpellingSuggestion::class);
+        ->and($results->facets->typeCounts)->toBe(['all' => 0, 'product' => 0, 'brand' => 0, 'shop' => 0, 'category' => 0, 'ingredient' => 0]);
+
+    match ($engine) {
+        // Prototype `sDidYouMean`: no visible label scores above 12 against this query.
+        'database' => expect($results->didYouMean)->toBe([]),
+        // MeilisearchSearchEngine provides no did-you-mean (typo tolerance answers near misses): always empty.
+        'meilisearch' => expect($results->didYouMean)->toBe([]),
+    };
 })->with('engines');
 
 it('counts type tabs and product facets over the visible, filtered results', function (string $engine) {
@@ -261,8 +275,8 @@ it('builds Meilisearch filters only from typed, allow-listed values', function (
             'ingredients IN ["whey-isolate"]',
             'markets.DE.in_stock = true',
             'rating.average >= 4.00',
-            'markets.DE.min_total_minor >= 1000',
-            'markets.DE.min_total_minor <= 5000',
+            'markets.DE.min_total_market_minor >= 1000',
+            'markets.DE.min_total_market_minor <= 5000',
         ])
         ->and($queries['test_products']['sort'])->toBe(['markets.DE.min_total_eur_minor:asc'])
         ->and([$queries['test_products']['page'], $queries['test_products']['hitsPerPage']])->toBe([2, 10])
@@ -349,4 +363,80 @@ it('waits for write tasks and surfaces failed tasks', function () {
     expect(fn () => $engine->upsert('brands', [$document]))->toThrow(SearchEngineException::class, 'invalid_document_id')
         ->and(fn () => $engine->upsert('products', [$document]))->toThrow(SearchEngineException::class, 'does not belong')
         ->and(fn () => $engine->upsert('brands; DROP', [$document]))->toThrow(InvalidArgumentException::class);
+});
+
+/*
+ * Engine selection: the local engine scans every document per query, so a
+ * production environment must run Meilisearch.
+ */
+
+it('refuses the full-scan local engine in production', function (string $driver) {
+    app()->detectEnvironment(static fn (): string => 'production');
+    config(['scout.driver' => $driver]);
+
+    expect(fn () => app(SearchEngine::class))->toThrow(RuntimeException::class, 'production');
+})->with(['collection', 'database', 'null', 'empty' => ['']]);
+
+it('binds Meilisearch in production and the local engine outside it', function () {
+    fakeMeilisearch();
+    app()->detectEnvironment(static fn (): string => 'production');
+
+    expect(app(SearchEngine::class))->toBeInstanceOf(MeilisearchSearchEngine::class);
+
+    app()->detectEnvironment(static fn (): string => 'local');
+    config(['scout.driver' => 'collection']);
+
+    expect(app(SearchEngine::class))->toBeInstanceOf(DatabaseSearchEngine::class);
+});
+
+it('answers zero results instead of failing while a Meilisearch index is missing', function () {
+    $http = fakeMeilisearch();
+    $http->failSearchesWithMissingIndex('test_brands');
+    $search = app(SearchService::class);
+
+    $all = $search->search(new SearchQuery('whey', 'DE'));
+    $products = $search->search(new SearchQuery('whey', 'DE', type: SearchableType::Product));
+    $suggestions = $search->suggest('whey', 'DE', 5);
+
+    expect([$all->total, $all->hits, $products->total, $products->hits, $suggestions->items])->toBe([0, [], 0, [], []])
+        ->and($all->facets->typeCounts)->toBe(['all' => 0, 'product' => 0, 'brand' => 0, 'shop' => 0, 'category' => 0, 'ingredient' => 0])
+        ->and($http->requestsTo('POST', '#^/multi-search$#'))->toHaveCount(3);
+});
+
+it('still surfaces Meilisearch search errors other than a missing index', function () {
+    $http = fakeMeilisearch();
+    $http->searchError = ['status' => 400, 'code' => 'invalid_search_filter', 'message' => 'Attribute `x` is not filterable.'];
+
+    expect(fn () => app(SearchService::class)->search(new SearchQuery('whey', 'DE')))->toThrow(ApiException::class, 'not filterable');
+});
+
+it('caps Meilisearch task waits to the remaining budget of the indexing run', function () {
+    $http = fakeMeilisearch();
+    $engine = app(SearchEngine::class);
+    $document = new SearchDocument('7', SearchEntityType::Brand, ['id' => 7, 'name' => 'BioPeak'], 'biopeak', 1);
+    // A frozen clock: 100 ms remain of the hard budget for the whole run.
+    $budget = IndexingBudget::start(0.05, 0.1, static fn (): float => 1000.0);
+
+    $http->stickNextTask();
+    $started = hrtime(true);
+
+    expect(fn () => app(TaskWaitCap::class)->during($budget, fn () => $engine->upsert('brands', [$document])))
+        ->toThrow(SearchEngineException::class, 'timed out after 100 ms')
+        ->and($http->requestsTo('GET', '#^/tasks/\d+$#'))->toHaveCount(2)
+        ->and((hrtime(true) - $started) / 1e9)->toBeLessThan(5.0);
+
+    // Outside a run the configured timeout applies again.
+    expect(app(TaskWaitCap::class)->timeoutMs(30_000))->toBe(30_000);
+});
+
+it('gives every contract test the same indexed demo: search documents only, no catalogue rows', function () {
+    SearchScenario::useDatabaseEngine();
+    SearchScenario::indexedDemo();
+    $first = [SearchDocumentRecord::query()->count(), Product::query()->count(), Country::query()->count()];
+
+    SearchScenario::indexedDemo();
+
+    expect($first[0])->toBeGreaterThan(100)
+        ->and(array_slice($first, 1))->toBe([0, 0])
+        ->and([SearchDocumentRecord::query()->count(), Product::query()->count(), Country::query()->count()])->toBe($first);
 });

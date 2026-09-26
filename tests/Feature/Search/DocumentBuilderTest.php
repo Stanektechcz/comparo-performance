@@ -78,7 +78,7 @@ it('carries no price or purchase data for a blocked market', function () {
         ->and($document['blocked_markets'])->toBe(['CZ', 'DE'])
         ->and($document['purchasable_markets'])->toBe(['GB'])
         ->and($document['offer_markets'])->toBe(['GB'])
-        ->and($document['markets']['GB'])->toHaveKeys(['min_total_minor', 'currency', 'min_total_eur_minor'])
+        ->and($document['markets']['GB'])->toHaveKeys(['min_total_minor', 'currency', 'min_total_market_minor', 'min_total_eur_minor'])
         ->and(array_keys($document['markets']))->toBe(['CZ', 'DE', 'GB']);
 });
 

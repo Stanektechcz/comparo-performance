@@ -89,7 +89,7 @@ final readonly class LocalQueryEvaluator
             && ($filters->ingredientSlugs === [] || array_intersect($filters->ingredientSlugs, $attributes->ingredientSlugs) !== [])
             && (! $filters->inStock || ($state !== null && $state->inStock))
             && ($filters->minRating === null || ($attributes->ratingAverage !== null && $attributes->ratingAverage >= $filters->minRating))
-            && (! $filters->hasPriceRange() || self::inPriceRange($state?->minTotalMinor, $filters));
+            && (! $filters->hasPriceRange() || self::inPriceRange($state?->minTotalMarketMinor, $filters));
     }
 
     private static function inPriceRange(?int $total, SearchFilters $filters): bool

@@ -33,8 +33,14 @@ use Illuminate\Support\Facades\DB;
  * - category: its document; renames and moves also the documents and
  *   products of the category and all its descendants (slug paths)
  * - ingredient: its document; renames also the products listing it
- * - merchant and merchant inputs (coupon, shipping zone, trust signal, risk
- *   event): the merchant document and its products
+ * - merchant inputs (coupon, shipping zone, trust signal, risk event): the
+ *   merchant document and its products
+ * - merchant: by changed column (allow-lists below) — columns that feed the
+ *   offer comparison of its products (status, verification, ratings,
+ *   currency, free-shipping threshold): the merchant document and its
+ *   products; columns only the merchant document shows (name, slug,
+ *   website): that document; anything else (description, return days, home
+ *   country, rating source, timestamps): nothing
  * - country: an `is_active` change of an existing country, or deleting an
  *   active one, requests a full reindex ({@see QueueFullSearchReindex}).
  *   Creating a country does not: countries are created inactive and then
@@ -43,8 +49,18 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class CatalogIndexTriggers
 {
-    /** Merchant columns whose change alone is no reason to reindex. */
-    private const array MERCHANT_IGNORED = ['updated_at', 'created_at'];
+    /**
+     * Merchant columns the offer comparison of its products reads (listing
+     * status, ComparoRank trust inputs, landed-price currency and free
+     * shipping), plus the merchant document's own rating/verified fields.
+     */
+    public const array MERCHANT_PRODUCT_COLUMNS = ['status', 'verified_at', 'rating_average', 'rating_count', 'weighted_rating', 'currency', 'free_shipping_threshold_minor'];
+
+    /** Merchant columns only the merchant document shows. */
+    public const array MERCHANT_DOCUMENT_COLUMNS = ['name', 'slug', 'website'];
+
+    /** Merchant columns no search document depends on. */
+    public const array MERCHANT_IGNORED = ['id', 'description', 'return_days', 'home_country_code', 'rating_source', 'created_at', 'updated_at'];
 
     public function __construct(private SearchOutbox $outbox) {}
 
@@ -144,10 +160,16 @@ final readonly class CatalogIndexTriggers
 
     public function merchantSaved(Merchant $merchant, bool $created): void
     {
-        $relevant = array_diff(array_keys($merchant->getChanges()), self::MERCHANT_IGNORED);
+        $changed = array_keys($merchant->getChanges());
 
-        if ($created || $relevant !== []) {
+        if ($created || array_intersect($changed, self::MERCHANT_PRODUCT_COLUMNS) !== []) {
             $this->merchantChanged($merchant->id);
+
+            return;
+        }
+
+        if (array_intersect($changed, self::MERCHANT_DOCUMENT_COLUMNS) !== []) {
+            $this->enqueueDocument(SearchEntityType::Merchant, $merchant->id);
         }
     }
 

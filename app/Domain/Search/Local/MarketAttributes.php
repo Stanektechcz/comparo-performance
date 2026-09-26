@@ -12,17 +12,17 @@ use InvalidArgumentException;
 final readonly class MarketAttributes
 {
     /**
-     * @param  ?int  $minTotalMinor  lowest landed total in the market currency (informational for unknown)
+     * @param  ?int  $minTotalMarketMinor  lowest landed total converted into the MARKET's currency (minor units; informational for unknown) — what the price filter compares, since its bounds are market-currency amounts; null without a total or a rate
      * @param  ?int  $minTotalEurMinor  the same total in the comparison currency, for cross-currency sorting
      */
     public function __construct(
         public ComplianceStatus $compliance,
         public bool $purchasable = false,
-        public ?int $minTotalMinor = null,
+        public ?int $minTotalMarketMinor = null,
         public ?int $minTotalEurMinor = null,
         public bool $inStock = false,
     ) {
-        if ($compliance->isBlocked() && ($purchasable || $minTotalMinor !== null || $minTotalEurMinor !== null)) {
+        if ($compliance->isBlocked() && ($purchasable || $minTotalMarketMinor !== null || $minTotalEurMinor !== null)) {
             throw new InvalidArgumentException('A blocked market carries no purchase or price data.');
         }
 
@@ -30,7 +30,7 @@ final readonly class MarketAttributes
             throw new InvalidArgumentException("A product with compliance [{$compliance->value}] is not purchasable.");
         }
 
-        if (($minTotalMinor !== null && $minTotalMinor < 0) || ($minTotalEurMinor !== null && $minTotalEurMinor < 0)) {
+        if (($minTotalMarketMinor !== null && $minTotalMarketMinor < 0) || ($minTotalEurMinor !== null && $minTotalEurMinor < 0)) {
             throw new InvalidArgumentException('Totals cannot be negative.');
         }
     }

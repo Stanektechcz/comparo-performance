@@ -10,6 +10,15 @@ use InvalidArgumentException;
  * `markets.{CC}` of a product document. A blocked market carries no price
  * keys at all; `unknown` keeps the informational total with
  * `purchasable: false`.
+ *
+ * Amounts: `min_total_minor` + `currency` is the lowest landed total in the
+ * winning offer's own currency (display/inspection only — pages show the
+ * live comparison); `min_total_market_minor` is the same total in the
+ * market's currency (the price filter, whose bounds are market-currency
+ * minor units); `min_total_eur_minor` is it in the comparison currency
+ * (cross-currency price sort). Both conversions use the dated rates the
+ * comparison used to choose the lowest total (ProductMarketSnapshot); a
+ * missing rate leaves the converted key out.
  */
 final readonly class ProductMarketEntry
 {
@@ -21,8 +30,9 @@ final readonly class ProductMarketEntry
         public ?string $currency,
         public ?int $minTotalEurMinor,
         public bool $inStock,
+        public ?int $minTotalMarketMinor = null,
     ) {
-        if ($compliance->isBlocked() && ($purchasable || $offerCount !== 0 || $minTotalMinor !== null || $currency !== null || $minTotalEurMinor !== null || $inStock)) {
+        if ($compliance->isBlocked() && ($purchasable || $offerCount !== 0 || $minTotalMinor !== null || $currency !== null || $minTotalEurMinor !== null || $minTotalMarketMinor !== null || $inStock)) {
             throw new InvalidArgumentException('A blocked market carries no offers, stock or price data.');
         }
 
@@ -34,8 +44,8 @@ final readonly class ProductMarketEntry
             throw new InvalidArgumentException('A total needs its currency and vice versa.');
         }
 
-        if ($minTotalMinor === null && $minTotalEurMinor !== null) {
-            throw new InvalidArgumentException('A comparison-currency total needs the market total.');
+        if ($minTotalMinor === null && ($minTotalEurMinor !== null || $minTotalMarketMinor !== null)) {
+            throw new InvalidArgumentException('A converted total needs the total it was converted from.');
         }
 
         if ($currency !== null && preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
@@ -59,6 +69,7 @@ final readonly class ProductMarketEntry
             currency: $state->lowestTotal?->currency,
             minTotalEurMinor: $state->lowestTotal === null ? null : $state->lowestTotalComparisonMinor,
             inStock: $state->inStock,
+            minTotalMarketMinor: $state->lowestTotal === null ? null : $state->lowestTotalMarketMinor,
         );
     }
 
@@ -75,13 +86,15 @@ final readonly class ProductMarketEntry
             currency: isset($payload['currency']) ? (string) $payload['currency'] : null,
             minTotalEurMinor: isset($payload['min_total_eur_minor']) ? (int) $payload['min_total_eur_minor'] : null,
             inStock: (bool) $payload['in_stock'],
+            minTotalMarketMinor: isset($payload['min_total_market_minor']) ? (int) $payload['min_total_market_minor'] : null,
         );
     }
 
     /**
-     * Price keys are present only when there is a total.
+     * Price keys are present only when there is a total (converted keys only
+     * with a known rate).
      *
-     * @return array{compliance: string, purchasable: bool, offer_count: int, in_stock: bool, min_total_minor?: int, currency?: string, min_total_eur_minor?: int}
+     * @return array{compliance: string, purchasable: bool, offer_count: int, in_stock: bool, min_total_minor?: int, currency?: string, min_total_market_minor?: int, min_total_eur_minor?: int}
      */
     public function toArray(): array
     {
@@ -97,6 +110,10 @@ final readonly class ProductMarketEntry
             $entry['currency'] = $this->currency;
         }
 
+        if ($this->minTotalMarketMinor !== null) {
+            $entry['min_total_market_minor'] = $this->minTotalMarketMinor;
+        }
+
         if ($this->minTotalEurMinor !== null) {
             $entry['min_total_eur_minor'] = $this->minTotalEurMinor;
         }
@@ -109,7 +126,7 @@ final readonly class ProductMarketEntry
         return new MarketAttributes(
             compliance: $this->compliance->status(),
             purchasable: $this->purchasable,
-            minTotalMinor: $this->minTotalMinor,
+            minTotalMarketMinor: $this->minTotalMarketMinor,
             minTotalEurMinor: $this->minTotalEurMinor,
             inStock: $this->inStock,
         );

@@ -4,6 +4,7 @@ namespace App\Http\Presenters;
 
 use App\Domain\Catalog\Completeness\ProductCompletenessService;
 use App\Domain\Catalog\Completeness\ProductFacts;
+use App\Domain\Compliance\ComplianceDecision;
 use App\Domain\Platform\Markets\MarketContext;
 use App\Domain\Shared\Money;
 use App\Models\Ingredient;
@@ -67,15 +68,24 @@ final class ProductPresenter
     }
 
     /**
+     * `$decisionsByProductId`, when given, must map each product's id to what
+     * `ComplianceResolver::decide()` would return for it in this market at
+     * `$now` (e.g. a caller's own `decideMany()` batch) — passing it skips a
+     * redundant per-product compliance query for a product already covered
+     * by the caller's batch; any product missing from the map still resolves
+     * its own decision.
+     *
      * @param  Collection<int, Product>  $products
+     * @param  array<int, ComplianceDecision>|null  $decisionsByProductId
      * @return list<array<string, mixed>>
      */
-    public function summaries(Collection $products, MarketContext $market, DateTimeImmutable $now): array
+    public function summaries(Collection $products, MarketContext $market, DateTimeImmutable $now, ?array $decisionsByProductId = null): array
     {
         $products->loadMissing(['brand', 'category']);
 
-        return array_values($products->map(function (Product $product) use ($market, $now): array {
-            $summary = $this->offers->forPage($product, $market, $now)['offerSummary'];
+        return array_values($products->map(function (Product $product) use ($market, $now, $decisionsByProductId): array {
+            $compliance = $decisionsByProductId[$product->id] ?? null;
+            $summary = $this->offers->forPage($product, $market, $now, $compliance)['offerSummary'];
 
             return [
                 'id' => $product->id,

@@ -37,6 +37,17 @@ import type {
     SearchTabCount,
 } from '@/types/search';
 
+/**
+ * Remount key for SearchFilters: its price and rating inputs are local
+ * state, so they must restart from the server-confirmed values whenever a
+ * visit changes them (e.g. "Clear all filters", back/forward).
+ */
+function filterStateKey(criteria: SearchCriteria): string {
+    return [criteria.price_min, criteria.price_max, criteria.min_rating]
+        .map((value) => value ?? '')
+        .join(':');
+}
+
 function SearchForm({ criteria }: { criteria: SearchCriteria }) {
     const id = useId();
     const [text, setText] = useState(criteria.q);
@@ -311,6 +322,7 @@ export default function SearchPage(props: SearchPageProps) {
                     <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
                         <aside aria-label="Filters">
                             <SearchFilters
+                                key={filterStateKey(query)}
                                 criteria={query}
                                 facets={facets}
                                 priceCurrency={priceCurrency}

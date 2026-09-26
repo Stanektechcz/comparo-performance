@@ -18,6 +18,8 @@ use InvalidArgumentException;
 use Meilisearch\Client;
 use Meilisearch\Contracts\MultiSearchFederation;
 use Meilisearch\Contracts\SearchQuery as MeilisearchQuery;
+use Meilisearch\Exceptions\ApiException;
+use Meilisearch\Exceptions\TimeOutException;
 
 /**
  * The production search engine (`scout.driver` meilisearch). Uses the
@@ -34,7 +36,14 @@ use Meilisearch\Contracts\SearchQuery as MeilisearchQuery;
  * page when a type tab is selected) plus, for the "all" tab, one federated
  * multi-search for the merged page. Did-you-mean is not provided by this
  * adapter (typo tolerance answers near misses); it returns an empty list.
- * Writes wait for their task, so a returned upsert is searchable.
+ * A search or suggestion while an index does not exist (before the first
+ * reindex, or a lost index) answers zero results instead of failing the
+ * page: a multi-search fails as a whole when one of its indexes is missing.
+ *
+ * Writes wait for their task, so a returned upsert is searchable. A wait is
+ * bounded by `scout.meilisearch.task_timeout_ms` and, inside a queued
+ * indexing run, by that run's remaining budget ({@see TaskWaitCap}); a
+ * timed-out wait throws (the task may still complete; writes are idempotent).
  */
 final readonly class MeilisearchSearchEngine implements SearchEngine
 {
@@ -44,6 +53,8 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
 
     private const int POLL_INTERVAL_MS = 50;
 
+    private const string INDEX_NOT_FOUND = 'index_not_found';
+
     private const array FACETS = ['brand.slug', 'category.path', 'ingredients'];
 
     public function __construct(
@@ -51,6 +62,7 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
         private IndexNames $names,
         private int $taskTimeoutMs = 30_000,
         private QueryNormalizer $normalizer = new QueryNormalizer,
+        private TaskWaitCap $waits = new TaskWaitCap,
     ) {
         if ($taskTimeoutMs < 1) {
             throw new InvalidArgumentException('The task timeout must be positive.');
@@ -120,7 +132,12 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
             $queries[] = $search;
         }
 
-        $response = $this->client->multiSearch($queries);
+        $response = $this->multiSearch($queries);
+
+        if ($response === null) {
+            return new SearchResults([], 0, self::facets([], []), $query->page, $query->perPage);
+        }
+
         $results = array_values(is_array($response['results'] ?? null) ? $response['results'] : []);
         $totals = [];
         $byIndex = [];
@@ -160,7 +177,7 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
 
         $queries = array_map(fn (SearchIndex $index): MeilisearchQuery => $this->baseQuery($index, $normalized->trimmed, $market, new SearchFilters, [self::PRIMARY_KEY, 'name', 'slug']), SearchIndex::cases());
 
-        $response = $this->client->multiSearch($queries, (new MultiSearchFederation)->setLimit(self::positive($limit))->setOffset(0));
+        $response = $this->multiSearch($queries, (new MultiSearchFederation)->setLimit(self::positive($limit))->setOffset(0));
         $items = [];
 
         foreach ((array) ($response['hits'] ?? []) as $hit) {
@@ -211,7 +228,7 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
     {
         $queries = array_map(fn (SearchIndex $index): MeilisearchQuery => $this->baseQuery($index, $text, $market, $query->filters, [self::PRIMARY_KEY]), SearchIndex::cases());
 
-        $response = $this->client->multiSearch($queries, (new MultiSearchFederation)->setLimit(self::positive($query->perPage))->setOffset(self::nonNegative($query->offset())));
+        $response = $this->multiSearch($queries, (new MultiSearchFederation)->setLimit(self::positive($query->perPage))->setOffset(self::nonNegative($query->offset())));
         $hits = [];
 
         foreach ((array) ($response['hits'] ?? []) as $hit) {
@@ -332,6 +349,27 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
         return $search;
     }
 
+    /**
+     * One (optionally federated) multi-search; null when one of its indexes
+     * does not exist (Meilisearch fails the whole request), which callers
+     * answer with zero results. Any other error propagates.
+     *
+     * @param  list<MeilisearchQuery>  $queries
+     * @return ?array<array-key, mixed>
+     */
+    private function multiSearch(array $queries, ?MultiSearchFederation $federation = null): ?array
+    {
+        try {
+            return $this->client->multiSearch($queries, $federation);
+        } catch (ApiException $exception) {
+            if ($exception->errorCode === self::INDEX_NOT_FOUND) {
+                return null;
+            }
+
+            throw $exception;
+        }
+    }
+
     private function ensureIndex(string $physical): void
     {
         $this->wait($this->client->createIndex($physical, ['primaryKey' => self::PRIMARY_KEY]), 'create', $physical, ignoreExistingIndex: true);
@@ -348,7 +386,13 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
             throw new SearchEngineException("Search engine task [{$operation}] on [{$index}] returned no task id.");
         }
 
-        $done = $this->client->waitForTask($uid, $this->taskTimeoutMs, self::POLL_INTERVAL_MS);
+        $timeoutMs = $this->waits->timeoutMs($this->taskTimeoutMs);
+
+        try {
+            $done = $this->client->waitForTask($uid, $timeoutMs, self::POLL_INTERVAL_MS);
+        } catch (TimeOutException $exception) {
+            throw new SearchEngineException("Search engine task [{$operation}] on [{$index}] timed out after {$timeoutMs} ms.", 0, $exception);
+        }
 
         if (($done['status'] ?? null) === 'succeeded') {
             return;

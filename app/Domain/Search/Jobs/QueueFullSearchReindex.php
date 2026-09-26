@@ -2,7 +2,6 @@
 
 namespace App\Domain\Search\Jobs;
 
-use App\Domain\Search\Console\SettingsSynchronizer;
 use App\Domain\Search\Indexing\SearchOutbox;
 use App\Domain\Search\SearchEntityType;
 use Illuminate\Bus\Queueable;
@@ -17,9 +16,10 @@ use Illuminate\Queue\InteractsWithQueue;
  *
  * It does NOT run the swap rebuild of `comparo:search:reindex` (a full
  * rebuild outgrows the 60 s budget of the search queue). Instead it
- * re-applies the index settings — the product index declares per-market
- * filterable attributes, so the settings fingerprint changes with the
- * market list — and enqueues every document source into the outbox in
+ * dispatches {@see SyncSearchSettings} — the product index declares
+ * per-market filterable attributes, so the settings fingerprint changes with
+ * the market list, and a Meilisearch settings task can take long, so it runs
+ * as its own job — and enqueues every document source into the outbox in
  * chunks; ProcessSearchOutbox then rewrites all documents with the new
  * market data in bounded batches. The swap command stays available for a
  * zero-downtime rebuild that also drops orphaned documents.
@@ -52,9 +52,9 @@ final class QueueFullSearchReindex implements ShouldBeUniqueUntilProcessing, Sho
         return 'comparo:search:full-reindex';
     }
 
-    public function handle(SettingsSynchronizer $settings, SearchOutbox $outbox): void
+    public function handle(SearchOutbox $outbox): void
     {
-        $settings->sync();
+        SyncSearchSettings::dispatch();
 
         foreach (SearchEntityType::cases() as $entity) {
             $outbox->enqueueAll($entity);

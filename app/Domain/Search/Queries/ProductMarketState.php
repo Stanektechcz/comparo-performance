@@ -14,8 +14,9 @@ final readonly class ProductMarketState
 {
     /**
      * @param  int  $offerCount  public (publishable, shipping) offers
-     * @param  ?Money  $lowestTotal  the comparison's lowest landed total, in that offer's currency
-     * @param  ?int  $lowestTotalComparisonMinor  the same total in the comparison currency (null without a rate)
+     * @param  ?Money  $lowestTotal  the comparison's lowest landed total, in that offer's currency (display)
+     * @param  ?int  $lowestTotalComparisonMinor  the same total in the comparison currency (null without a rate), for cross-market sorting
+     * @param  ?int  $lowestTotalMarketMinor  the same total in the market's currency (null without a rate), for the price filter
      * @param  bool  $inStock  whether any public offer is in stock or low stock
      */
     public function __construct(
@@ -25,6 +26,7 @@ final readonly class ProductMarketState
         public ?Money $lowestTotal = null,
         public ?int $lowestTotalComparisonMinor = null,
         public bool $inStock = false,
+        public ?int $lowestTotalMarketMinor = null,
     ) {
         if (preg_match('/^[A-Z]{2}$/', $market) !== 1) {
             throw new InvalidArgumentException("Invalid market code [{$market}].");
@@ -34,8 +36,12 @@ final readonly class ProductMarketState
             throw new InvalidArgumentException('An offer count cannot be negative.');
         }
 
-        if ($compliance->isBlocked() && ($offerCount > 0 || $lowestTotal !== null || $lowestTotalComparisonMinor !== null || $inStock)) {
+        if ($compliance->isBlocked() && ($offerCount > 0 || $lowestTotal !== null || $lowestTotalComparisonMinor !== null || $lowestTotalMarketMinor !== null || $inStock)) {
             throw new InvalidArgumentException('A blocked market carries no offers or price data.');
+        }
+
+        if ($lowestTotal === null && ($lowestTotalComparisonMinor !== null || $lowestTotalMarketMinor !== null)) {
+            throw new InvalidArgumentException('A converted total needs the total it was converted from.');
         }
     }
 

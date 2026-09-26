@@ -20,6 +20,10 @@ use InvalidArgumentException;
  * deletions for the rest (merged, retired, deactivated, missing). Idempotent,
  * so the outbox processor can retry any batch. `$index` defaults to the
  * live index; the reindex command targets `<index>_tmp`.
+ *
+ * While a full rebuild of the live index runs ({@see RebuildMarker}), a live
+ * write first records its ids for that rebuild and then goes to the live
+ * index AND the rebuild twin, so the swap cannot bring back an older document.
  */
 final readonly class DocumentIndexer
 {
@@ -30,6 +34,7 @@ final readonly class DocumentIndexer
         private CategoryDocumentBuilder $categories,
         private IngredientDocumentBuilder $ingredients,
         private MerchantDocumentBuilder $merchants,
+        private RebuildMarker $rebuilds,
     ) {}
 
     /**
@@ -45,7 +50,22 @@ final readonly class DocumentIndexer
             SearchEntityType::Merchant => $this->merchants->build($ids, $now),
         };
 
-        return $this->write($built, $index ?? SearchIndex::forEntity($entity)->value);
+        if ($index !== null) {
+            return $this->write($built, $index);
+        }
+
+        $live = SearchIndex::forEntity($entity);
+        $rebuild = $this->rebuilds->active($live);
+
+        if ($rebuild === null) {
+            return $this->write($built, $live->value);
+        }
+
+        $this->rebuilds->record($rebuild, $ids);
+        $report = $this->write($built, $live->value);
+        $this->write($built, $rebuild->temporary);
+
+        return $report;
     }
 
     /**

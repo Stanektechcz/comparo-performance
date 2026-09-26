@@ -48,11 +48,18 @@ final class OfferComparisonPresenter
      * `topEligibleTotal` is the best-buy-eligible offer's landed total in that
      * offer's own currency (server-side only, for price intelligence).
      *
+     * `$compliance`, when given, must be what `ComplianceResolver::decide()`
+     * would return for this product, market and `$now` — e.g. one entry of a
+     * caller's own `decideMany()` batch — so the cached payload is identical
+     * either way; the cache key does not vary by who resolved it. Passing it
+     * skips a redundant per-product compliance query when the caller already
+     * resolved compliance for a whole page.
+     *
      * @return array{compliance: array<string, mixed>, offers: list<array<string, mixed>>, offerSummary: array<string, mixed>, topEligibleTotal: Money|null}
      */
-    public function forPage(Product $product, MarketContext $market, DateTimeImmutable $now): array
+    public function forPage(Product $product, MarketContext $market, DateTimeImmutable $now, ?ComplianceDecision $compliance = null): array
     {
-        $page = $this->cached($product, $market, $now, self::PAGE_FORMAT, fn (OfferComparison $comparison): array => [
+        $page = $this->cached($product, $market, $now, self::PAGE_FORMAT, $compliance, fn (OfferComparison $comparison): array => [
             'compliance' => self::compliance($comparison->compliance),
             'offers' => array_map(fn (ComparedOffer $offer): array => $this->offerRow($offer, $comparison), $comparison->offers),
             'offerSummary' => [
@@ -97,11 +104,13 @@ final class OfferComparisonPresenter
      * currency when they share one, the comparison currency (`meta.currency`)
      * when they span several; both are null without a market minimum.
      *
+     * `$compliance` has the same precondition as {@see self::forPage()}.
+     *
      * @return array{data: list<array<string, mixed>>, meta: array<string, mixed>}
      */
-    public function forApi(Product $product, MarketContext $market, DateTimeImmutable $now): array
+    public function forApi(Product $product, MarketContext $market, DateTimeImmutable $now, ?ComplianceDecision $compliance = null): array
     {
-        return $this->cached($product, $market, $now, self::API_FORMAT, fn (OfferComparison $comparison): array => [
+        return $this->cached($product, $market, $now, self::API_FORMAT, $compliance, fn (OfferComparison $comparison): array => [
             'data' => array_map(fn (ComparedOffer $offer): array => $this->apiOffer($offer, $comparison), $comparison->offers),
             'meta' => [
                 'country' => $market->code,
@@ -175,7 +184,7 @@ final class OfferComparisonPresenter
      * @param  Closure(OfferComparison): T  $present
      * @return T
      */
-    private function cached(Product $product, MarketContext $market, DateTimeImmutable $now, string $format, Closure $present): array
+    private function cached(Product $product, MarketContext $market, DateTimeImmutable $now, string $format, ?ComplianceDecision $compliance, Closure $present): array
     {
         $key = CacheKeys::offerComparison(
             $product->id,
@@ -191,7 +200,7 @@ final class OfferComparisonPresenter
             return $hit['payload'];
         }
 
-        $comparison = $this->comparison->compare($product, $market, $now);
+        $comparison = $this->comparison->compare($product, $market, $now, $compliance);
         $payload = $present($comparison);
         Cache::put($key, ['valid_until' => $comparison->validUntil->getTimestamp(), 'payload' => $payload], $comparison->validUntil);
 

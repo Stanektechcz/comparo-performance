@@ -50,10 +50,20 @@ final class CacheKeys
     /**
      * Presented header suggestions for one market and one normalised (folded,
      * trimmed) prefix. The prefix is hashed so any visitor input yields a
-     * short, safe key; `format` changes whenever the presented shape does.
+     * short, safe key; `format` changes whenever the presented shape does;
+     * `version` is the compliance-driven token of self::searchSuggestVersion(),
+     * so a compliance change makes every cached suggestion unreachable.
      */
-    public static function searchSuggest(string $market, string $normalizedPrefix, int $limit, string $format): string
+    public static function searchSuggest(string $market, string $normalizedPrefix, int $limit, string $format, string $version): string
     {
-        return "search:suggest:{$format}:{$market}:{$limit}:".hash('sha256', $normalizedPrefix);
+        return "search:suggest:{$format}:{$version}:{$market}:{$limit}:".hash('sha256', $normalizedPrefix);
+    }
+
+    /**
+     * Version token rotated whenever any product's compliance changes.
+     */
+    public static function searchSuggestVersion(): string
+    {
+        return 'search:suggest-version';
     }
 }

@@ -13,8 +13,9 @@ use Psr\Http\Message\ResponseInterface;
 /**
  * A PSR-18 stand-in for a Meilisearch server: records every request and
  * answers task-creating calls with an enqueued task, task polls with
- * `succeeded` (or a configured failure), and searches with a configurable
- * handler. Lets the Meilisearch adapter be tested without a server.
+ * `succeeded` (or a configured failure, or `enqueued` forever for a stuck
+ * task), and searches with a configurable handler or a configured API error.
+ * Lets the Meilisearch adapter be tested without a server.
  */
 final class FakeMeilisearchHttp implements ClientInterface
 {
@@ -23,6 +24,12 @@ final class FakeMeilisearchHttp implements ClientInterface
 
     /** @var array<int, array{code: string, message: string}> task uid => failure */
     public array $failures = [];
+
+    /** @var array<int, true> task uids that never leave `enqueued` */
+    public array $stuck = [];
+
+    /** @var ?array{status: int, code: string, message: string} the error every search answers with */
+    public ?array $searchError = null;
 
     /** @var ?Closure(string, mixed): array<string, mixed> */
     public ?Closure $searchHandler = null;
@@ -44,6 +51,22 @@ final class FakeMeilisearchHttp implements ClientInterface
         $this->failures[$this->nextTask] = ['code' => $code, 'message' => $message];
     }
 
+    /**
+     * The next task created stays `enqueued` for every poll.
+     */
+    public function stickNextTask(): void
+    {
+        $this->stuck[$this->nextTask] = true;
+    }
+
+    /**
+     * Searches answer like Meilisearch does when an index is missing.
+     */
+    public function failSearchesWithMissingIndex(string $index): void
+    {
+        $this->searchError = ['status' => 400, 'code' => 'index_not_found', 'message' => "Inside `.queries[1]`: Index `{$index}` not found."];
+    }
+
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
         $method = $request->getMethod();
@@ -53,15 +76,14 @@ final class FakeMeilisearchHttp implements ClientInterface
         $this->requests[] = ['method' => $method, 'path' => $path, 'body' => $body];
 
         if ($method === 'GET' && preg_match('#^/tasks/(\d+)$#', $path, $matches) === 1) {
-            $uid = (int) $matches[1];
-            $failure = $this->failures[$uid] ?? null;
-
-            return self::json(200, $failure === null
-                ? ['uid' => $uid, 'status' => 'succeeded']
-                : ['uid' => $uid, 'status' => 'failed', 'error' => $failure]);
+            return self::json(200, $this->task((int) $matches[1]));
         }
 
         if ($method === 'POST' && (str_ends_with($path, '/search') || $path === '/multi-search')) {
+            if ($this->searchError !== null) {
+                return self::json($this->searchError['status'], ['message' => $this->searchError['message'], 'code' => $this->searchError['code'], 'type' => 'invalid_request', 'link' => 'https://docs.meilisearch.com/errors#'.$this->searchError['code']]);
+            }
+
             return self::json(200, $this->searchHandler === null ? ['results' => [], 'hits' => []] : ($this->searchHandler)($path, $body));
         }
 
@@ -77,6 +99,22 @@ final class FakeMeilisearchHttp implements ClientInterface
             $this->requests,
             static fn (array $request): bool => $request['method'] === $method && preg_match($pathPattern, $request['path']) === 1,
         ));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function task(int $uid): array
+    {
+        if (isset($this->stuck[$uid])) {
+            return ['uid' => $uid, 'status' => 'enqueued'];
+        }
+
+        $failure = $this->failures[$uid] ?? null;
+
+        return $failure === null
+            ? ['uid' => $uid, 'status' => 'succeeded']
+            : ['uid' => $uid, 'status' => 'failed', 'error' => $failure];
     }
 
     /**

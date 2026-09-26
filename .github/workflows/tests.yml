@@ -34,6 +34,19 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Meilisearch contract run (tests/Feature/Search/EngineContractTest.php, the
+      # "meilisearch engine" dataset): runs when MEILISEARCH_HOST answers. The key
+      # is a CI-only master key for this throwaway container, never a real secret.
+      # SCOUT_DRIVER stays `collection` (phpunit.xml) for the rest of the suite.
+      meilisearch:
+        image: getmeili/meilisearch:v1.53.2
+        env:
+          MEILI_MASTER_KEY: ci-only-meilisearch-master-key
+          MEILI_ENV: development
+          MEILI_NO_ANALYTICS: 'true'
+        ports:
+          - 7700:7700
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,8 +89,20 @@ jobs:
       - name: Prototype parity fixtures are current
         run: node tools/prototype-parity/export-fixtures.mjs --check
 
+      - name: Wait for Meilisearch
+        run: |
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:7700/health && exit 0
+            sleep 2
+          done
+          echo "Meilisearch did not become healthy" >&2
+          exit 1
+
       - name: Tests (SQLite)
         if: matrix.database == 'sqlite'
+        env:
+          MEILISEARCH_HOST: http://127.0.0.1:7700
+          MEILISEARCH_KEY: ci-only-meilisearch-master-key
         run: php artisan test --compact
 
       - name: Tests (PostgreSQL 16)
@@ -89,6 +114,8 @@ jobs:
           DB_DATABASE: comparo_test
           DB_USERNAME: comparo
           DB_PASSWORD: comparo
+          MEILISEARCH_HOST: http://127.0.0.1:7700
+          MEILISEARCH_KEY: ci-only-meilisearch-master-key
         run: php artisan test --compact
 
   frontend:

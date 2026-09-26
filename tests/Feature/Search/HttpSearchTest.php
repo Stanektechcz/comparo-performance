@@ -11,6 +11,7 @@ use App\Models\Category;
 use App\Models\Country;
 use App\Models\Product;
 use App\Models\ProductComplianceRule;
+use App\Providers\SearchServiceProvider;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -273,4 +274,16 @@ it('keeps the market consistent for inactive markets by falling back to the defa
 
     $this->get(route('search', ['q' => 'whey', 'market' => 'CZ']))
         ->assertInertia(fn (Assert $page) => $page->where('market.code', 'DE'));
+});
+
+it('limits the search page to 60 requests per minute and IP', function () {
+    httpSearchCatalog();
+    $url = route('search', ['q' => 'whey']);
+
+    foreach (range(1, SearchServiceProvider::PAGE_PER_MINUTE) as $attempt) {
+        $this->get($url)->assertOk();
+    }
+
+    $this->get($url)->assertTooManyRequests();
+    $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.2'])->get($url)->assertOk();
 });

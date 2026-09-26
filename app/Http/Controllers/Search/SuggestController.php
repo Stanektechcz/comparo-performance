@@ -6,6 +6,7 @@ use App\Domain\Platform\Cache\CacheKeys;
 use App\Domain\Platform\Markets\MarketContext;
 use App\Domain\Search\Analytics\RecordSearch;
 use App\Domain\Search\Analytics\SearchRecordInput;
+use App\Domain\Search\Listeners\InvalidateCachedSuggestions;
 use App\Domain\Search\Query\QueryNormalizer;
 use App\Domain\Search\SearchService;
 use App\Domain\Search\SearchSource;
@@ -18,8 +19,9 @@ use Illuminate\Support\Facades\Cache;
 /**
  * GET /api/public/v1/search/suggest?q=&market= — header suggestions: names
  * and site-relative URLs only (no prices, no outbound links, blocked
- * products excluded), cached 60 s per market and normalised prefix, limited
- * by `search-suggest` (120/min per IP).
+ * products excluded), cached 60 s per market and normalised prefix (the
+ * cache is dropped on any compliance change, InvalidateCachedSuggestions),
+ * limited by `search-suggest` (120/min per IP).
  */
 class SuggestController extends Controller
 {
@@ -36,7 +38,7 @@ class SuggestController extends Controller
 
         /** @var array{data: array<string, mixed>, refs: list<array{type: string, id: int}>} $payload */
         $payload = Cache::remember(
-            CacheKeys::searchSuggest($market->code, $normalized->folded, self::LIMIT, self::FORMAT),
+            CacheKeys::searchSuggest($market->code, $normalized->folded, self::LIMIT, self::FORMAT, InvalidateCachedSuggestions::currentVersion()),
             self::CACHE_SECONDS,
             static fn (): array => $presenter->present($search->suggest($normalized->trimmed, $market->code, self::LIMIT), $normalized->trimmed, $market),
         );

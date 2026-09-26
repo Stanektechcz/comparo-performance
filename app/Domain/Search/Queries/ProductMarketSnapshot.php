@@ -24,11 +24,21 @@ use DateTimeImmutable;
  * lets offers be listed. Blocked products skip the comparison and carry no
  * price data.
  *
+ * The lowest total (in the winning offer's own currency, for display) is
+ * converted twice, both through ExchangeRates::comparisonRates() — the
+ * dated rates, either direction, valid at `$now` — which is the path the
+ * comparison itself uses to choose the lowest total across currencies:
+ * into the comparison currency (cross-market price sort) and into the
+ * market's currency (the price filter, whose bounds are market-currency
+ * minor units). Amounts already in the target currency pass through; a
+ * missing rate leaves the converted amount null.
+ *
  * Cost: one compliance query per market plus one comparison per
  * (product × active market) that is not blocked; each comparison issues its
  * own handful of queries (offers with merchants, zones, coupons, history).
  * With 46 products × 27 markets that is ≈1 250 comparisons for a full
- * rebuild, which is why indexing runs queued in chunks (≤ 200 products).
+ * rebuild, which is why indexing runs queued in small product batches
+ * (`comparo.search.indexing.product_batch`).
  */
 final readonly class ProductMarketSnapshot
 {
@@ -89,8 +99,9 @@ final readonly class ProductMarketSnapshot
                     compliance: $decision->status,
                     offerCount: count($comparison->offers),
                     lowestTotal: $lowest,
-                    lowestTotalComparisonMinor: $lowest === null ? null : $this->inComparisonCurrency($lowest, $comparisonCurrency, $now),
+                    lowestTotalComparisonMinor: $lowest === null ? null : $this->convertedMinor($lowest, $comparisonCurrency, $now),
                     inStock: self::anyInStock($comparison->offers),
+                    lowestTotalMarketMinor: $lowest === null ? null : $this->convertedMinor($lowest, $market->currency, $now),
                 );
             }
         }
@@ -112,12 +123,12 @@ final readonly class ProductMarketSnapshot
         return false;
     }
 
-    private function inComparisonCurrency(Money $total, string $comparisonCurrency, DateTimeImmutable $now): ?int
+    /**
+     * The total in `$target` minor units (half away from zero), through the
+     * same comparison-rate table the offer comparison uses; null without a rate.
+     */
+    private function convertedMinor(Money $total, string $target, DateTimeImmutable $now): ?int
     {
-        if ($total->currency === $comparisonCurrency) {
-            return $total->minor;
-        }
-
-        return $this->exchangeRates->conversionEitherWay($total->currency, $comparisonCurrency, $now)?->convert($total)->minor;
+        return $this->exchangeRates->comparisonRates([$total->currency], $target, $now)->convert($total)?->minor;
     }
 }

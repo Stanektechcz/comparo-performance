@@ -67,6 +67,10 @@ final class MeilisearchFilters
     }
 
     /**
+     * Price bounds are market-currency minor units and compare
+     * `markets.{CC}.min_total_market_minor` (the lowest total converted into
+     * the market currency), never the offer-currency display total.
+     *
      * @return list<non-empty-string>
      */
     public static function productFilters(SearchFilters $filters, string $market): array
@@ -95,11 +99,11 @@ final class MeilisearchFilters
         }
 
         if ($filters->priceMinMinor !== null) {
-            $clauses[] = "markets.{$market}.min_total_minor >= ".self::nonNegative($filters->priceMinMinor);
+            $clauses[] = "markets.{$market}.min_total_market_minor >= ".self::nonNegative($filters->priceMinMinor);
         }
 
         if ($filters->priceMaxMinor !== null) {
-            $clauses[] = "markets.{$market}.min_total_minor <= ".self::nonNegative($filters->priceMaxMinor);
+            $clauses[] = "markets.{$market}.min_total_market_minor <= ".self::nonNegative($filters->priceMaxMinor);
         }
 
         return $clauses;
