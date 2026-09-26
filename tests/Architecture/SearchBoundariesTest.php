@@ -26,6 +26,7 @@ use Tests\Feature\Search\Support\CommercialTerms;
 $searchNamespaces = [
     'App\Domain\Search',
     'App\Domain\Search\Analytics',
+    'App\Domain\Search\Benchmark',
     'App\Domain\Search\Console',
     'App\Domain\Search\Contracts',
     'App\Domain\Search\Documents',
