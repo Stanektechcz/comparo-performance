@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -75,5 +76,41 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         $role = $this->merchants()->whereKey($merchantId)->first()?->getRelationValue('pivot')?->getAttribute('role');
 
         return is_string($role) ? MerchantRole::tryFrom($role) : null;
+    }
+
+    /**
+     * Reviews written by this user (nulled, not deleted, on erasure).
+     *
+     * @return HasMany<Review, $this>
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Helpful / not-helpful votes cast by this user (nulled on erasure).
+     *
+     * @return HasMany<ReviewVote, $this>
+     */
+    public function reviewVotes(): HasMany
+    {
+        return $this->hasMany(ReviewVote::class);
+    }
+
+    /**
+     * @return HasMany<PurchaseProof, $this>
+     */
+    public function purchaseProofs(): HasMany
+    {
+        return $this->hasMany(PurchaseProof::class);
+    }
+
+    /**
+     * @return HasMany<Order, $this>
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 }

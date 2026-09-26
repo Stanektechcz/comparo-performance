@@ -19,13 +19,31 @@ use App\Domain\Matching\MatchDecisionKind;
 use App\Domain\Offers\LinkStatus;
 use App\Domain\Offers\ListingStatus;
 use App\Domain\Offers\OfferDeactivationReason;
+use App\Domain\Orders\DeliveryEventType;
+use App\Domain\Orders\DisputeStatus;
+use App\Domain\Orders\EventSource;
+use App\Domain\Orders\OrderEventType;
+use App\Domain\Orders\OrderSource;
+use App\Domain\Orders\OrderStatus;
+use App\Domain\Orders\ReturnStatus;
 use App\Domain\Pricing\CouponState;
 use App\Domain\Pricing\CouponType;
+use App\Domain\Reviews\ReplyStatus;
+use App\Domain\Reviews\ReportReason;
+use App\Domain\Reviews\ReportStatus;
+use App\Domain\Reviews\ReviewStatus;
+use App\Domain\Reviews\ReviewSubjectType;
+use App\Domain\Reviews\VerificationMethod;
+use App\Domain\Reviews\VerificationStatus;
+use App\Domain\Verification\ProofMethod;
+use App\Domain\Verification\ProofStatus;
 use App\Models\Brand;
 use App\Models\BrandAlias;
+use App\Models\ContentReport;
 use App\Models\Country;
 use App\Models\Coupon;
 use App\Models\Currency;
+use App\Models\DeliveryEvent;
 use App\Models\FeedError;
 use App\Models\FeedItem;
 use App\Models\FeedMapping;
@@ -40,10 +58,23 @@ use App\Models\MerchantProduct;
 use App\Models\MerchantShippingZone;
 use App\Models\MerchantTrustSignal;
 use App\Models\Offer;
+use App\Models\Order;
+use App\Models\OrderDispute;
+use App\Models\OrderEvent;
+use App\Models\OrderItem;
+use App\Models\OrderReturn;
 use App\Models\Product;
 use App\Models\ProductCandidate;
 use App\Models\ProductCandidateSource;
 use App\Models\ProductComplianceRule;
+use App\Models\PurchaseProof;
+use App\Models\RatingAggregate;
+use App\Models\Review;
+use App\Models\ReviewModerationEvent;
+use App\Models\ReviewReply;
+use App\Models\ReviewSignal;
+use App\Models\ReviewSubRating;
+use App\Models\ReviewVote;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -230,4 +261,169 @@ it('creates valid rows for every Phase 2 matching factory state', function () {
         ->and($brand->aliases()->orderBy('id')->get()->map(fn (BrandAlias $alias) => $alias->status)->all())
         ->toBe([BrandAliasStatus::Approved, BrandAliasStatus::Suggested, BrandAliasStatus::Rejected])
         ->and(MatchingPolicy::factory()->create()->is_active)->toBeFalse();
+});
+
+it('creates valid rows for every Phase 4 review factory state', function () {
+    $user = User::factory()->create();
+    $shop = Merchant::factory()->create();
+    $product = Product::factory()->create();
+    $productReview = Review::factory()->for($user)->forProduct($product)->purchasedFrom($shop)->verified()->approved()->withCredibility()->create();
+    $shopReview = Review::factory()->for($user)->forMerchant($shop)->verificationPending()->rating(2)->create();
+
+    expect($productReview)
+        ->subject_type->toBe(ReviewSubjectType::Product)
+        ->status->toBe(ReviewStatus::Approved)
+        ->verification_status->toBe(VerificationStatus::Verified)
+        ->verification_method->toBe(VerificationMethod::KnownOrder)
+        ->credibility_weight->toBe('1.000')
+        ->and($productReview->isPublic())->toBeTrue()
+        ->and($productReview->verifiedOrder)->user_id->toBe($user->id)->merchant_id->toBe($shop->id)
+        ->and($shopReview)->merchant_id->toBe($shop->id)->product_id->toBeNull()->rating->toBe(2)
+        ->and($shopReview->verification_status)->toBe(VerificationStatus::Pending)
+        ->and(Review::factory()->forMerchant()->verified()->create()->verifiedOrder->merchant_id)->not->toBeNull()
+        ->and(collect([
+            Review::factory()->rejected()->create(),
+            Review::factory()->flagged()->create(),
+            Review::factory()->hidden()->create(),
+            Review::factory()->withdrawn()->create(),
+        ])->map(fn (Review $review) => $review->status)->all())
+        ->toBe([ReviewStatus::Rejected, ReviewStatus::Flagged, ReviewStatus::Hidden, ReviewStatus::Withdrawn])
+        ->and($user->reviews()->count())->toBe(2)
+        ->and($product->reviews()->sole()->is($productReview))->toBeTrue()
+        ->and($shop->reviews()->sole()->is($shopReview))->toBeTrue()
+        ->and($shop->purchasedFromReviews()->sole()->is($productReview))->toBeTrue();
+
+    ReviewSubRating::factory()->for($productReview)->dimension('value', 5)->create();
+    $signal = ReviewSignal::factory()->for($shopReview)->duplicateOf($productReview)->inBurst()->youngAccount()->create();
+    $vote = ReviewVote::factory()->for($productReview)->notHelpful()->create();
+
+    expect($productReview->subRatings()->sole()->rating)->toBe(5)
+        ->and($signal)->similarity->toBe('0.9700')->account_age_days->toBe(3)->burst_key->not->toBeNull()
+        ->and($signal->duplicateOf->is($productReview))->toBeTrue()
+        ->and(ReviewSignal::factory()->purged()->create())->ip_hash->toBeNull()->hashes_purged_at->not->toBeNull()
+        ->and($vote->is_helpful)->toBeFalse()
+        ->and($vote->user->reviewVotes()->sole()->is($vote))->toBeTrue();
+
+    $reply = ReviewReply::factory()->forReview($shopReview)->resolved()->create();
+    $defaultReply = ReviewReply::factory()->create();
+
+    expect($reply->merchant_id)->toBe($shop->id)
+        ->and($reply->status->isPublic())->toBeTrue()
+        ->and($reply->resolution_confirmed_at)->not->toBeNull()
+        ->and($shop->reviewReplies()->sole()->is($reply))->toBeTrue()
+        ->and($defaultReply->merchant_id)->toBe($defaultReply->review->merchant_id)
+        // A product review's reply belongs to the shop it was bought from.
+        ->and(ReviewReply::factory()->forReview($productReview)->create()->merchant_id)->toBe($shop->id)
+        ->and(ReviewReply::factory()->hidden()->create()->status)->toBe(ReplyStatus::Hidden)
+        ->and(ReviewReply::factory()->removed()->create()->status)->toBe(ReplyStatus::Removed)
+        ->and(ReviewReply::factory()->editWindowClosed()->create()->editable_until->isPast())->toBeTrue();
+
+    $replyReport = ContentReport::factory()->forReply($reply)->byMerchant($shop)->create();
+    $report = ContentReport::factory()->forReview($productReview)->reason(ReportReason::Misleading, 'Wrong flavour')->upheld()->create();
+
+    expect($replyReport)->review_id->toBe($shopReview->id)->reporter_merchant_id->toBe($shop->id)
+        ->and($replyReport->concernsReply())->toBeTrue()
+        ->and($report)->reason->toBe(ReportReason::Misleading)->status->toBe(ReportStatus::Upheld)->decided_by_user_id->not->toBeNull()
+        ->and(ContentReport::factory()->dismissed()->create()->status)->toBe(ReportStatus::Dismissed)
+        ->and(ContentReport::factory()->create()->status->isOpen())->toBeTrue();
+
+    $moderator = User::factory()->create();
+    $rejection = ReviewModerationEvent::factory()->forReview($shopReview)->rejected()->byActor($moderator)->create();
+    $flag = ReviewModerationEvent::factory()->forReview($productReview)->flaggedBySystem($report)->create();
+
+    expect($rejection)->to_status->toBe(ReviewStatus::Rejected)->statement->not->toBeNull()->actor_user_id->toBe($moderator->id)
+        ->and($flag)->automated->toBeTrue()->actor_user_id->toBeNull()->content_report_id->toBe($report->id)
+        ->and($productReview->moderationEvents()->sole()->is($flag))->toBeTrue();
+
+    $aggregate = RatingAggregate::factory()->forProduct($product)->limited()->create();
+
+    expect($aggregate)->review_count->toBe(3)->source->toBe(RatingAggregate::SOURCE_AGGREGATED)
+        ->and($product->ratingAggregate->is($aggregate))->toBeTrue()
+        ->and(RatingAggregate::factory()->forMerchant($shop)->create()->subject_type)->toBe(ReviewSubjectType::Merchant)
+        ->and($shop->ratingAggregate)->not->toBeNull();
+});
+
+it('creates valid rows for every Phase 4 proof and order factory state', function () {
+    $user = User::factory()->create();
+    $shop = Merchant::factory()->create();
+    $review = Review::factory()->for($user)->forProduct(Product::factory()->create())->purchasedFrom($shop)->create();
+    $verified = PurchaseProof::factory()->forReview($review)->verified()->create();
+
+    expect($verified)->user_id->toBe($user->id)->merchant_id->toBe($shop->id)->status->toBe(ProofStatus::Verified)
+        ->and($verified->hasStoredReceipt())->toBeFalse()
+        ->and($verified->order)->user_id->toBe($user->id)->merchant_id->toBe($shop->id)->source->toBe(OrderSource::PurchaseProof)
+        ->and($verified->order->purchaseProof->is($verified))->toBeTrue()
+        ->and($user->purchaseProofs()->sole()->is($verified))->toBeTrue()
+        ->and($shop->purchaseProofs()->sole()->is($verified))->toBeTrue()
+        ->and(PurchaseProof::factory()->create()->hasStoredReceipt())->toBeTrue()
+        ->and(collect([
+            PurchaseProof::factory()->knownOrder()->matched()->create(),
+            PurchaseProof::factory()->affiliateClickMatch()->create(),
+            PurchaseProof::factory()->forwardedEmail()->needsReview()->create(),
+            PurchaseProof::factory()->rejected()->create(),
+            PurchaseProof::factory()->unavailable()->create(),
+            PurchaseProof::factory()->expired()->create(),
+            PurchaseProof::factory()->withdrawn()->create(),
+        ])->map(fn (PurchaseProof $proof) => [$proof->method, $proof->status, $proof->hasStoredReceipt()])->all())->toBe([
+            [ProofMethod::KnownOrder, ProofStatus::Matched, false],
+            [ProofMethod::AffiliateClickMatch, ProofStatus::Unavailable, false],
+            [ProofMethod::ForwardedEmail, ProofStatus::NeedsReview, false],
+            [ProofMethod::Receipt, ProofStatus::Rejected, false],
+            [ProofMethod::Receipt, ProofStatus::Unavailable, true],
+            [ProofMethod::Receipt, ProofStatus::Expired, false],
+            [ProofMethod::Receipt, ProofStatus::Withdrawn, false],
+        ]);
+
+    $order = Order::factory()->for($user)->for($shop)->market('CZ')->money(45_000, 9_900)->delivered(4)->create();
+    $item = OrderItem::factory()->for($order)->quantity(3, 15_000)->create();
+
+    expect($order)->currency->toBe('CZK')->total_minor->toBe(54_900)->status->toBe(OrderStatus::Delivered)
+        ->and((int) round($order->placed_at->diffInDays($order->delivered_at)))->toBe(4)
+        ->and($order->country->code)->toBe('CZ')
+        ->and($item)->currency->toBe('CZK')->line_total_minor->toBe(45_000)
+        ->and($item->product->orderItems()->sole()->is($item))->toBeTrue()
+        ->and($user->orders()->count())->toBe(2)
+        ->and($shop->orders()->count())->toBe(2)
+        ->and(Order::factory()->fromConversion()->create())->source->toBe(OrderSource::AffiliateConversion)->click_reference->toStartWith('clk_')
+        ->and(Order::factory()->fromClickDeclaration('clk_declared')->create()->click_reference)->toBe('clk_declared')
+        ->and(Order::factory()->fromProof()->create()->click_reference)->toBeNull()
+        ->and(Order::factory()->inTransit()->create()->shipped_at)->not->toBeNull()
+        ->and(Order::factory()->returned()->create()->status)->toBe(OrderStatus::Returned)
+        ->and(Order::factory()->disputed()->create()->status)->toBe(OrderStatus::Disputed)
+        ->and(Order::factory()->withoutUser()->create()->user_id)->toBeNull();
+
+    $placed = OrderEvent::factory()->for($order)->create();
+    $correction = OrderEvent::factory()->corrects($placed)->create();
+    $dispatched = DeliveryEvent::factory()->for($order)->create();
+
+    expect($correction)->order_id->toBe($order->id)->type->toBe(OrderEventType::Corrected)->supersedes_id->toBe($placed->id)
+        ->and(OrderEvent::factory()->for($order)->type(OrderEventType::ReturnRequested)->fromShopper()->create())
+        ->source->toBe(EventSource::Shopper)->provisional_until->not->toBeNull()
+        ->and(collect([
+            DeliveryEvent::factory()->for($order)->inTransit()->create(),
+            DeliveryEvent::factory()->for($order)->delivered()->create(),
+            DeliveryEvent::factory()->for($order)->failed()->create(),
+            DeliveryEvent::factory()->for($order)->reportedByShopper()->create(),
+        ])->map(fn (DeliveryEvent $event) => [$event->type, $event->source])->all())->toBe([
+            [DeliveryEventType::InTransit, EventSource::Carrier],
+            [DeliveryEventType::Delivered, EventSource::Merchant],
+            [DeliveryEventType::DeliveryFailed, EventSource::Carrier],
+            [DeliveryEventType::Delivered, EventSource::Shopper],
+        ])
+        ->and(DeliveryEvent::factory()->corrects($dispatched)->create()->supersedes->is($dispatched))->toBeTrue()
+        ->and($order->events()->first()->is($placed))->toBeTrue()
+        ->and($order->events()->count())->toBe(3)
+        ->and($order->deliveryEvents()->count())->toBe(6);
+
+    expect(collect([
+        OrderReturn::factory()->for($order)->refunded(1_500, 'CZK')->create(),
+        OrderReturn::factory()->for($order)->rejected()->create(),
+        OrderReturn::factory()->for($order)->cancelled()->create(),
+        OrderReturn::factory()->for($order)->sentBack()->create(),
+    ])->map(fn (OrderReturn $return) => $return->status)->all())
+        ->toBe([ReturnStatus::Refunded, ReturnStatus::Rejected, ReturnStatus::Cancelled, ReturnStatus::SentBack])
+        ->and(OrderReturn::factory()->create()->order->status)->toBe(OrderStatus::Delivered)
+        ->and(OrderDispute::factory()->for($order)->resolved()->create()->resolution_code)->toBe('refunded')
+        ->and(OrderDispute::factory()->for($order)->expired()->create()->status)->toBe(DisputeStatus::Expired)
+        ->and(OrderDispute::factory()->create())->status->toBe(DisputeStatus::Open)->order->status->toBe(OrderStatus::Disputed);
 });

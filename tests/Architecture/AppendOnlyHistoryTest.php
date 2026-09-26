@@ -4,9 +4,13 @@ use App\Domain\Platform\Exceptions\AppendOnlyViolation;
 use App\Domain\Pricing\History\SnapshotReason;
 use App\Domain\Pricing\History\SnapshotSource;
 use App\Models\AuditLog;
+use App\Models\DeliveryEvent;
 use App\Models\MatchingDecision;
 use App\Models\Offer;
+use App\Models\OrderEvent;
 use App\Models\PriceSnapshot;
+use App\Models\ReviewModerationEvent;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -94,3 +98,23 @@ it('keeps the audit log append-only at the database level', function () {
 
     DB::table('audit_logs')->delete();
 })->throws(QueryException::class);
+
+it('refuses to update or delete Phase 4 history through Eloquent', function (Model $row, string $operation) {
+    $operation === 'update' ? $row->forceFill(['created_at' => now()->subYear()])->save() : $row->delete();
+})->with([
+    'review moderation event' => fn () => ReviewModerationEvent::factory()->create(),
+    'order event' => fn () => OrderEvent::factory()->create(),
+    'delivery event' => fn () => DeliveryEvent::factory()->create(),
+])->with(['update', 'delete'])->throws(AppendOnlyViolation::class);
+
+it('refuses raw updates and deletes of Phase 4 history at the database level', function (string $table, Closure $create, string $operation) {
+    $create();
+
+    $operation === 'update'
+        ? DB::table($table)->update(['created_at' => now()->subYear()])
+        : DB::table($table)->delete();
+})->with([
+    'review moderation event' => ['review_moderation_events', fn () => ReviewModerationEvent::factory()->create()],
+    'order event' => ['order_events', fn () => OrderEvent::factory()->create()],
+    'delivery event' => ['delivery_events', fn () => DeliveryEvent::factory()->create()],
+])->with(['update', 'delete'])->throws(QueryException::class);

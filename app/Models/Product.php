@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -166,6 +167,36 @@ class Product extends Model
     public function marketPriceStats(): HasMany
     {
         return $this->hasMany(MarketPriceStat::class);
+    }
+
+    /**
+     * Reviews of this product (all states; only approved ones are public).
+     *
+     * @return HasMany<Review, $this>
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Order lines naming this product (orders from evidence only).
+     *
+     * @return HasMany<OrderItem, $this>
+     */
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * The real-review rating projection (source `aggregated`), if computed.
+     *
+     * @return HasOne<RatingAggregate, $this>
+     */
+    public function ratingAggregate(): HasOne
+    {
+        return $this->hasOne(RatingAggregate::class);
     }
 
     public function isMerged(): bool
