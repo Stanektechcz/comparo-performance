@@ -7,7 +7,8 @@ vlastní ověření klíčových tvrzení + běžící staging. Backlog: `docs/a
 
 | Oblast | Stav |
 |---|---|
-| Staging (lokální, production-like) | **BĚŽÍ** — http://127.0.0.1:8080, smoke 26 kontrol / 0 FAIL |
+| Staging (lokální, production-like) | **BĚŽÍ** — http://127.0.0.1:8080, release `6f80e0d`, smoke 26/26 PASS, 0 varování |
+| Staging release candidate v CI (Linux) | **PROŠEL** — PG16 + Redis 7 + Horizon + Meilisearch, smoke 26/26, `composer audit` a `npm audit` 0 zranitelností |
 | Staging (hostovaný, URL pro tým) | **BLOKOVÁNO člověkem** — server, doména, TLS, secrets |
 | Demo pilot (fiktivní data prototypu) | připraven na stagingu |
 | Pilot s reálnými obchody a nakupujícími | **NE** — chybí cesta pro reálná data (F-21…F-26) + 2FA (F-20) + zálohy/monitoring (F-27/28) + právní stránky (F-39) |
@@ -19,10 +20,10 @@ vlastní ověření klíčových tvrzení + běžící staging. Backlog: `docs/a
 |---|---|---|
 | Definice prostředí `staging` (A-39) | HOTOVO | production-like: Meilisearch povinný, Horizon supervisory pro všechny fronty, produkční politika hesel, APP_DEBUG off; demo data jen opt-in a označená; `6e00460` |
 | Lokální staging (Windows bez Dockeru) | BĚŽÍ | čistý klon → `composer --no-dev` → `npm ci` → `build:ssr` → PostgreSQL 18 (embedded) + Meilisearch 1.53.2 + web + SSR + 2 queue workery + scheduler; `tools/staging/local-stack.mjs`, root `C:\Users\medion\comparo-staging` |
-| Smoke test | 26 kontrol, 0 FAIL | SSR na všech veřejných stránkách, API, ochrana merchant/admin/Horizon, 404 bez debug výpisu, assety, login merchanta → `/merchant/feeds`; odezvy 0,2–0,7 s (single-thread `artisan serve`) |
+| Smoke test | 26/26 PASS, 0 varování | SSR na všech veřejných stránkách, API, ochrana merchant/admin/Horizon, 404 bez debug výpisu, assety, login merchanta → `/merchant/feeds`; odezvy 0,2–0,7 s (single-thread `artisan serve`) |
 | Prohlížeč | OK | produktová stránka renderuje, 0 chyb v konzoli |
 | Linux deploy kit | HOTOVO, neověřeno na serveru | `tools/deploy/deploy.sh` (releases/shared/current, atomický swap, rollback), nginx + supervisor šablony; `dfdce90` |
-| CI „Staging release candidate“ | HOTOVO, první běh po push | `.github/workflows/staging.yml`: no-dev build, PG16 + Redis 7 + Meilisearch, migrate/seed/optimize/reindex, serve + SSR + Horizon, smoke s loginem, composer/npm audit |
+| CI „Staging release candidate“ | PROŠEL (PR #2) | `.github/workflows/staging.yml`: no-dev build, PG16 + Redis 7 + Meilisearch, migrate/seed/optimize/reindex, serve + SSR + Horizon, smoke s loginem, composer/npm audit |
 | Runbook | HOTOVO | `docs/operations/staging.md` |
 
 Omezení lokálního stagingu: bez Redis/Horizon (database fronty; Horizon ověřuje CI), bez TLS,
@@ -93,7 +94,7 @@ parametrizované SQL, CSV bez formula injection, analytika bez IP, demo data v p
 
 ## 6. Oponentura — co audit neověřil
 
-- Hostovaný staging neexistuje: deploy kit prošel jen `bash -n`, na Linuxu ho ověří až CI workflow.
+- Hostovaný staging neexistuje. CI ověřilo build a běh release na Linuxu (vč. Horizon/Redis), ne samotný `deploy.sh` (symlink swap, nginx, supervisor) — ten ověří první nasazení na server.
 - Lokální staging nemá Redis/Horizon ani TLS; výkon neodpovídá produkci (single-thread server).
 - Pokrytí testy je měřeno počtem testů, ne coverage nástrojem (není nainstalován pcov/xdebug).
 - Přístupnost: jen kontrola 3 stránek v kódu, bez axe/Lighthouse.
