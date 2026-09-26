@@ -3,6 +3,19 @@
 Newest first. Each entry states where work stopped and the exact next step, so a new session can
 continue without reconstructing context.
 
+## 2026-09-27 - Staging running, readiness audit, security fixes (PR #2 draft)
+
+- Commits on `phase-4/reviews-orders`: 314e80d P4-02, f183300 P4-03, 6e00460 A-39 staging + tools/staging,
+  dfdce90 deploy kit + `.github/workflows/staging.yml` + `docs/operations/staging.md`, ef46872 docs sync +
+  backlog F-20..F-45, 6f80e0d security fixes (H-1, M-1, M-3, M-4, M-5, L-1, L-2, demo AggregateRating) + audit.
+- Local staging: `C:\Users\medion\comparo-staging` (release 6f80e0d), http://127.0.0.1:8080. Start with
+  `PHP_INI_SCAN_DIR=C:\Users\medion\comparo-staging\runtime\php-conf.d node tools/staging/local-stack.mjs start C:\Users\medion\comparo-staging`
+  (pdo_pgsql is enabled only through that scan dir); stop with `node tools/staging/local-stack.mjs stop <root>`. Smoke 26/26 PASS.
+- CI "Staging release candidate" PASSED on Linux (PG16, Redis 7, Horizon, Meilisearch; smoke 26/26; composer/npm audit 0).
+  PR #2 (draft) open with Auto-fix on; the frontend format failure was fixed in 419425b.
+- Audit: `docs/audit/2026-09-26-readiness-audit.md`. Next: its section 7 (hosted staging needs a human hosting
+  decision; then F-21, F-24, F-22, F-23, F-25, F-26; F-20 2FA; Phase 4 wave 2).
+
 ## 2026-09-26 (later) — Open items closed, CI connected, Phase 4 ready
 
 - Owner delegated all open decisions: D-01…D-29 decided (ADR-0018, legal/DPO prerequisites marked);
