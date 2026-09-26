@@ -95,9 +95,10 @@ function main() {
             products: exportProductScores(loaded),
             offers: exportOfferScores(loaded),
         }),
-        [path.join(FIXTURE_DIR, 'reviews.json')]: serialise(meta, {
-            reviews: exportReviews(loaded),
-        }),
+        [path.join(FIXTURE_DIR, 'reviews.json')]: serialise(
+            meta,
+            exportReviews(loaded),
+        ),
         [path.join(FIXTURE_DIR, 'matching.json')]: serialise(
             { ...meta, policy: matchingPolicy() },
             {
@@ -110,9 +111,10 @@ function main() {
         [path.join(FIXTURE_DIR, 'dosing.json')]: serialise(meta, {
             cases: exportDosing(loaded),
         }),
-        [path.join(FIXTURE_DIR, 'delivery.json')]: serialise(meta, {
-            cases: exportDelivery(loaded),
-        }),
+        [path.join(FIXTURE_DIR, 'delivery.json')]: serialise(
+            meta,
+            exportDelivery(loaded),
+        ),
         [path.join(FIXTURE_DIR, 'anomalies.json')]: serialise(
             anomalyMeta(meta),
             exportAnomalies(loaded),

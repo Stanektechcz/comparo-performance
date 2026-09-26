@@ -14,11 +14,23 @@ use App\Domain\Matching\Engine\ProductMatcher;
 use App\Domain\Merchants\Risk\RiskInput;
 use App\Domain\Merchants\Risk\RiskLevel;
 use App\Domain\Merchants\Trust\TrustSignals;
+use App\Domain\Orders\Delivery\DeliveryObservation;
+use App\Domain\Orders\Delivery\DeliveryPolicy;
+use App\Domain\Orders\Delivery\DeliveryStatsCalculator;
 use App\Domain\Pricing\CouponState;
 use App\Domain\Pricing\CouponType;
 use App\Domain\Pricing\LandedPrice\CouponTerms;
 use App\Domain\Pricing\LandedPrice\LandedPriceInput;
 use App\Domain\Pricing\LandedPrice\ShippingTerms;
+use App\Domain\Reviews\Abuse\TextHeuristics;
+use App\Domain\Reviews\Abuse\TextSignal;
+use App\Domain\Reviews\Aggregation\RatingAggregate;
+use App\Domain\Reviews\Aggregation\RatingAggregator;
+use App\Domain\Reviews\Aggregation\RatingInput;
+use App\Domain\Reviews\Credibility\ReviewTrustCalculator;
+use App\Domain\Reviews\Credibility\ReviewTrustInput;
+use App\Domain\Reviews\Credibility\ReviewTrustSignal;
+use App\Domain\Reviews\Credibility\ReviewWeight;
 use App\Domain\Search\DidYouMean;
 use App\Domain\Search\DidYouMeanSuggestion;
 use App\Domain\Search\Local\EntryAttributes;
@@ -500,6 +512,275 @@ final class PrototypeFixtures
         $reference = $entry->type === SearchableType::Ingredient ? ['name' => $entry->name] : ['id' => $entry->id];
 
         return ['type' => $entry->type->value, ...$reference, 'score' => $hit->score];
+    }
+
+    /**
+     * An epoch-milliseconds prototype timestamp with its milliseconds kept.
+     */
+    public static function atMilliseconds(int|float $epochMilliseconds): DateTimeImmutable
+    {
+        $milliseconds = (int) $epochMilliseconds;
+        $moment = DateTimeImmutable::createFromFormat('U.u', sprintf('%d.%06d', intdiv($milliseconds, 1000), ($milliseconds % 1000) * 1000));
+
+        if ($moment === false) {
+            throw new UnexpectedValueException("Invalid prototype timestamp {$milliseconds}.");
+        }
+
+        return $moment->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /**
+     * JSON has no float/int distinction: integral floats become integers, as
+     * JSON.stringify prints them.
+     */
+    public static function jsonNumbers(mixed $value): mixed
+    {
+        return match (true) {
+            is_array($value) => array_map(self::jsonNumbers(...), $value),
+            is_float($value) && is_finite($value) && floor($value) === $value && abs($value) < 1e15 => (int) $value,
+            default => $value,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $input  a reviews.json `input` record
+     */
+    public static function reviewTrustInput(array $input): ReviewTrustInput
+    {
+        return new ReviewTrustInput(
+            verifiedPurchase: $input['verifiedPurchase'],
+            body: $input['text'] ?? '',
+            duplicateText: $input['duplicate'],
+            burstCluster: $input['burst'],
+            declaredAccountAgeDays: $input['flaggedAgeDays'],
+            accountCreatedAt: $input['userJoined'] === null ? null : self::atMilliseconds($input['userJoined']),
+            sharedDeviceCount: $input['deviceCount'],
+            sameTargetCount: $input['sameTargetCount'],
+        );
+    }
+
+    /**
+     * Per-review parity cases of a reviews.json section (`reviews` or
+     * `syntheticReviews`): credibility, weight and spam signals.
+     *
+     * @return array<int, array{expected: array<string, mixed>, actual: mixed}>
+     */
+    public static function reviewCases(string $section, ReviewTrustCalculator $calculator, ReviewWeight $weights, ?TextHeuristics $heuristics = null): array
+    {
+        $heuristics ??= TextHeuristics::prototype();
+        $cases = [];
+
+        foreach (self::load('reviews')[$section] as $record) {
+            $input = $record['input'];
+            $trust = $calculator->evaluate(self::reviewTrustInput($input), self::now());
+            $signals = $heuristics->signals($input['text'] ?? '', $input['rating'], $input['verifiedPurchase']);
+
+            $cases[$record['reviewId']] = [
+                'expected' => ['reviewTrust' => $record['reviewTrust'], 'weight' => $record['weight'], 'spamSignals' => $record['spamSignals']],
+                'actual' => self::jsonNumbers([
+                    'reviewTrust' => [
+                        'score' => $trust->score,
+                        'level' => $trust->level->label(),
+                        'signals' => array_map(static fn (ReviewTrustSignal $signal): array => ['label' => $signal->label(), 'pts' => $signal->points, 'detail' => $signal->detail], $trust->signals),
+                        'ageDays' => $trust->accountAgeDays,
+                    ],
+                    'weight' => $weights->of($trust->level, $input['verifiedPurchase']),
+                    'spamSignals' => array_map(static fn (TextSignal $signal): string => $signal->label(), $signals),
+                ]),
+            ];
+        }
+
+        return $cases;
+    }
+
+    /**
+     * Rating parity cases: every seed product (full product summary), every
+     * seed merchant (held-only aggregate) and the synthetic review sets.
+     *
+     * @return array<string, array{expected: mixed, actual: mixed}>
+     */
+    public static function ratingCases(ReviewTrustCalculator $calculator, ReviewWeight $weights, RatingAggregator $aggregator): array
+    {
+        $fixture = self::load('reviews');
+        $seedInputs = self::ratingInputs('reviews', $calculator, $weights);
+        $syntheticInputs = self::ratingInputs('syntheticReviews', $calculator, $weights);
+        $held = static fn (array $rating): array => $rating['heldCount'] === 0
+            ? ['heldCount' => 0]
+            : array_intersect_key($rating, array_flip(['heldCount', 'heldAvg', 'verifiedCount']));
+        $cases = [];
+
+        foreach ($fixture['productRatings'] as $record) {
+            $aggregate = $aggregator->aggregate(self::subjectInputs($seedInputs, 'product', $record['productId']));
+            $cases["product {$record['productId']}"] = [
+                'expected' => $record,
+                'actual' => ['productId' => $record['productId'], ...self::productRatingAsPrototype($aggregate)],
+            ];
+        }
+
+        foreach ($fixture['merchantRatings'] as $record) {
+            $cases["merchant {$record['merchantId']}"] = [
+                'expected' => $held($record['rating']),
+                'actual' => self::heldRatingAsPrototype($aggregator->aggregate(self::subjectInputs($seedInputs, 'merchant', $record['merchantId']))),
+            ];
+        }
+
+        foreach ($fixture['syntheticRatings'] as $record) {
+            $members = array_intersect_key($syntheticInputs, array_flip($record['reviewIds']));
+            $cases["synthetic {$record['name']}"] = [
+                'expected' => ['product' => $record['product'], 'merchant' => $held($record['merchant'])],
+                'actual' => [
+                    'product' => self::productRatingAsPrototype($aggregator->aggregate(self::subjectInputs($members, 'product', 1))),
+                    'merchant' => self::heldRatingAsPrototype($aggregator->aggregate(self::subjectInputs($members, 'merchant', 1))),
+                ],
+            ];
+        }
+
+        return $cases;
+    }
+
+    /**
+     * A product aggregate in the fixture's product-page shape.
+     *
+     * @return array<string, mixed>
+     */
+    public static function productRatingAsPrototype(RatingAggregate $aggregate): array
+    {
+        $labels = ['value' => 'Value for money', 'quality' => 'Quality', 'packaging' => 'Packaging', 'ease' => 'Ease of use'];
+        $percentages = $aggregate->distributionPercentages();
+        $distribution = [];
+        $subRatings = [];
+
+        foreach ($aggregate->distribution as $stars => $count) {
+            $distribution[] = ['n' => $stars, 'count' => $count, 'pct' => $percentages[$stars]];
+        }
+
+        foreach ($aggregate->subRatingDisplay() as $dimension => $value) {
+            $subRatings[] = ['label' => $labels[$dimension], 'value' => $value];
+        }
+
+        return (array) self::jsonNumbers([
+            'rating' => $aggregate->isEmpty()
+                ? ['avg' => 0, 'count' => 0]
+                : ['avg' => $aggregate->average, 'count' => $aggregate->count, 'verifiedCount' => $aggregate->verifiedCount, 'weighted' => true],
+            'distribution' => $distribution,
+            'recommendPct' => $aggregate->recommendPercent === null ? '—' : "{$aggregate->recommendPercent} %",
+            'subRatings' => $subRatings,
+            'verifiedCount' => $aggregate->verifiedCount,
+        ]);
+    }
+
+    /**
+     * A merchant aggregate in the shape of the prototype's held-only fields.
+     *
+     * @return array<string, mixed>
+     */
+    public static function heldRatingAsPrototype(RatingAggregate $aggregate): array
+    {
+        return $aggregate->isEmpty()
+            ? ['heldCount' => 0]
+            : (array) self::jsonNumbers(['heldCount' => $aggregate->count, 'heldAvg' => $aggregate->average, 'verifiedCount' => $aggregate->verifiedCount]);
+    }
+
+    /**
+     * delivery.json parity cases: seed shops per market, all markets, and the
+     * synthetic boundary sets (a custom minimum sample overrides the policy).
+     *
+     * @return array<string, array{expected: array<string, mixed>, actual: mixed}>
+     */
+    public static function deliveryCases(DeliveryPolicy $policy): array
+    {
+        $fixture = self::load('delivery');
+        $orders = self::seed()['orders'];
+        $cases = [];
+
+        foreach ([...$fixture['cases'], ...$fixture['allMarkets']] as $record) {
+            $scope = array_values(array_filter($orders, static fn (array $order): bool => $order['merchantId'] === $record['merchantId']
+                && ($record['market'] === null || $order['market'] === $record['market'])));
+            $cases["merchant {$record['merchantId']} market ".($record['market'] ?? 'all')] = self::deliveryCase($policy, $scope, $record['stats']);
+        }
+
+        foreach ($fixture['synthetic'] as $record) {
+            $scoped = $record['minSample'] === null ? $policy : $policy->with(['minSample' => $record['minSample']]);
+            $cases["synthetic {$record['name']}"] = self::deliveryCase($scoped, $record['orders'], $record['stats']);
+        }
+
+        return $cases;
+    }
+
+    /**
+     * @param  array<string, mixed>  $order  a prototype order row
+     */
+    public static function deliveryObservation(array $order): DeliveryObservation
+    {
+        return new DeliveryObservation(
+            actualDays: self::float($order['actualDays']),
+            promisedDays: (float) $order['promisedDays'],
+            returned: $order['status'] === 'returned',
+            disputed: $order['status'] === 'disputed',
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $orders
+     * @param  array<string, mixed>  $expected
+     * @return array{expected: array<string, mixed>, actual: mixed}
+     */
+    private static function deliveryCase(DeliveryPolicy $policy, array $orders, array $expected): array
+    {
+        $stats = (new DeliveryStatsCalculator($policy))->calculate(array_map(self::deliveryObservation(...), $orders));
+        unset($expected['note']);
+
+        $actual = $stats->enough
+            ? [
+                'enough' => true, 'sample' => $stats->sample, 'total' => $stats->total,
+                'medianDays' => $stats->medianDays, 'p90' => $stats->p90Days, 'promised' => $stats->promisedDays,
+                'onTimePct' => $stats->onTimePercent, 'returnPct' => $stats->returnPercent, 'disputePct' => $stats->disputePercent,
+                'faster' => $stats->fasterThanPromised,
+            ]
+            : ['enough' => false, 'sample' => $stats->sample, 'min' => $stats->minSample];
+
+        return ['expected' => $expected, 'actual' => self::jsonNumbers($actual)];
+    }
+
+    /**
+     * Rating inputs of a reviews.json section keyed by review id, weighted by
+     * the ported credibility (so policy changes flow into the aggregates).
+     *
+     * @return array<int, array{subject: string, targetId: int, input: RatingInput}>
+     */
+    private static function ratingInputs(string $section, ReviewTrustCalculator $calculator, ReviewWeight $weights): array
+    {
+        $inputs = [];
+
+        foreach (self::load('reviews')[$section] as $record) {
+            $input = $record['input'];
+            $level = $calculator->evaluate(self::reviewTrustInput($input), self::now())->level;
+            $inputs[$record['reviewId']] = [
+                'subject' => $input['subject'],
+                'targetId' => $input['targetId'],
+                'input' => new RatingInput(
+                    rating: $input['rating'],
+                    weight: $weights->of($level, $input['verifiedPurchase']),
+                    approved: $input['status'] === 'approved',
+                    verifiedPurchase: $input['verifiedPurchase'],
+                    recommends: (bool) $input['recommend'],
+                    subRatings: $input['sub'],
+                ),
+            ];
+        }
+
+        return $inputs;
+    }
+
+    /**
+     * @param  array<int, array{subject: string, targetId: int, input: RatingInput}>  $inputs
+     * @return list<RatingInput>
+     */
+    private static function subjectInputs(array $inputs, string $subject, int $targetId): array
+    {
+        $matching = array_filter($inputs, static fn (array $row): bool => $row['subject'] === $subject && $row['targetId'] === $targetId);
+
+        return array_values(array_map(static fn (array $row): RatingInput => $row['input'], $matching));
     }
 
     /**
