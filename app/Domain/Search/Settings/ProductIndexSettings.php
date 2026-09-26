@@ -13,10 +13,13 @@ use App\Domain\Search\Contracts\SearchIndex;
  * Version 2: the price filter reads `markets.{CC}.min_total_market_minor`
  * (market-currency amount); `min_total_minor` (offer currency, display only)
  * is no longer filterable.
+ *
+ * Version 3: explicit ranking rules with `sort` first
+ * ({@see SettingsSchema::RANKING_RULES}); every index kind bumped with it.
  */
 final readonly class ProductIndexSettings implements IndexSettings
 {
-    public const int VERSION = 2;
+    public const int VERSION = 3;
 
     public const array SEARCHABLE = [
         'name',

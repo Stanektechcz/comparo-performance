@@ -10,7 +10,7 @@ use App\Domain\Search\Contracts\SearchIndex;
  */
 final readonly class MerchantIndexSettings implements IndexSettings
 {
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     public const array SEARCHABLE = ['name', 'website_host'];
 

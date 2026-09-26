@@ -15,6 +15,7 @@ use DateTimeImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Meilisearch\Client;
+use Meilisearch\Exceptions\ApiException;
 use Throwable;
 
 /**
@@ -74,7 +75,7 @@ final class SearchScenario
 
     /**
      * Configures the Meilisearch engine when MEILISEARCH_HOST answers
-     * /health; returns the reason to skip otherwise.
+     * /health and accepts MEILISEARCH_KEY; returns the reason to skip otherwise.
      */
     public static function useMeilisearchEngine(): ?string
     {
@@ -91,9 +92,16 @@ final class SearchScenario
         ]);
 
         try {
-            if (! app(Client::class)->isHealthy()) {
+            $client = app(Client::class);
+
+            if (! $client->isHealthy()) {
                 return "Meilisearch contract run skipped: {$host} is not healthy.";
             }
+
+            // /health needs no key: probe an authenticated route too.
+            $client->version();
+        } catch (ApiException $exception) {
+            return "Meilisearch contract run skipped: {$host} rejected MEILISEARCH_KEY ({$exception->errorCode}).";
         } catch (Throwable) {
             return "Meilisearch contract run skipped: {$host} is not reachable.";
         }
@@ -117,7 +125,10 @@ final class SearchScenario
     {
         if (config('scout.driver') === 'meilisearch') {
             if (! self::$meilisearchIndexed) {
-                self::$anchor ??= self::buildAndRollBack(static fn (): null => null);
+                // Always build: `$anchor ??= build()` would skip the build
+                // when a database-engine case already set the anchor.
+                $anchor = self::buildAndRollBack(static fn (): null => null);
+                self::$anchor ??= $anchor;
                 self::$meilisearchIndexed = true;
             }
 

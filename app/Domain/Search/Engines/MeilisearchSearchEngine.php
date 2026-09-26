@@ -57,6 +57,16 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
 
     private const array FACETS = ['brand.slug', 'category.path', 'ingredients'];
 
+    /**
+     * The prototype splits queries on whitespace only, so `CMP-0023` is one
+     * token that matches whole or not at all. Meilisearch splits it into
+     * `cmp` + `0023` and, with its default `last` strategy, drops trailing
+     * words until something matches — `cmp` then matches every SKU. A
+     * whitespace-free query therefore requires all of its words; queries
+     * with several whitespace tokens keep `last` (partial matches rank lower).
+     */
+    private const string SINGLE_TOKEN_MATCHING = 'all';
+
     public function __construct(
         private Client $client,
         private IndexNames $names,
@@ -340,6 +350,11 @@ final readonly class MeilisearchSearchEngine implements SearchEngine
             ->setIndexUid($this->names->live($index))
             ->setQuery($text)
             ->setAttributesToRetrieve($attributes);
+
+        if (preg_match('/\s/u', $text) !== 1) {
+            $search->setMatchingStrategy(self::SINGLE_TOKEN_MATCHING);
+        }
+
         $filter = MeilisearchFilters::for($index, $market, $filters);
 
         if ($filter !== []) {

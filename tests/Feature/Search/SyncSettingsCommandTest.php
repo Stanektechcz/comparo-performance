@@ -3,7 +3,11 @@
 use App\Domain\Platform\Markets\MarketResolver;
 use App\Domain\Search\Contracts\SearchIndex;
 use App\Domain\Search\Engines\SearchEngineException;
+use App\Domain\Search\Settings\BrandIndexSettings;
+use App\Domain\Search\Settings\CategoryIndexSettings;
 use App\Domain\Search\Settings\IndexSettingsFactory;
+use App\Domain\Search\Settings\IngredientIndexSettings;
+use App\Domain\Search\Settings\MerchantIndexSettings;
 use App\Domain\Search\Settings\ProductIndexSettings;
 use App\Domain\Search\Settings\SynonymMap;
 use App\Models\Country;
@@ -48,10 +52,10 @@ it('validates settings on the database engine and applies them only when they ch
     $this->artisan('comparo:search:sync-settings')
         ->expectsTable(['Index', 'Version', 'Status'], [
             ['products', ProductIndexSettings::VERSION, 'applied'],
-            ['brands', 1, 'applied'],
-            ['merchants', 1, 'applied'],
-            ['categories', 1, 'applied'],
-            ['ingredients', 1, 'applied'],
+            ['brands', BrandIndexSettings::VERSION, 'applied'],
+            ['merchants', MerchantIndexSettings::VERSION, 'applied'],
+            ['categories', CategoryIndexSettings::VERSION, 'applied'],
+            ['ingredients', IngredientIndexSettings::VERSION, 'applied'],
         ])
         ->assertSuccessful();
 
@@ -71,6 +75,8 @@ it('pushes the product settings with per-market attributes, typo rules and synon
         ->and($products['filterableAttributes'])->toContain('blocked_markets', 'brand.slug', 'category.path', 'ingredients', 'markets.CZ.compliance', 'markets.DE.in_stock', 'markets.DE.min_total_market_minor', 'markets.DE.min_total_eur_minor')
         ->and($products['filterableAttributes'])->not->toContain('markets.DE.min_total_minor')
         ->and($products['sortableAttributes'])->toBe(['name', 'rating.average', 'rating.count', 'markets.CZ.min_total_eur_minor', 'markets.DE.min_total_eur_minor'])
+        ->and($products['rankingRules'])->toBe(['sort', 'words', 'typo', 'proximity', 'attribute', 'exactness'])
+        ->and(appliedSettings($http)['test_brands']['rankingRules'][0])->toBe('sort')
         ->and($products['typoTolerance'])->toBe(['enabled' => true, 'minWordSizeForTypos' => ['oneTypo' => 3, 'twoTypos' => 6], 'disableOnAttributes' => ['identifiers']])
         ->and($products['synonyms']['kreatin'])->toBe(['creatine', 'monohydrate', 'creapure'])
         ->and($products['synonyms']['whey'])->toBe(['isolate', 'casein', 'protein'])

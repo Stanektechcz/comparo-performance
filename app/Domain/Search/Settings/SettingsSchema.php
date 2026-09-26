@@ -17,6 +17,17 @@ final class SettingsSchema
     public const array MIN_WORD_SIZE_FOR_TYPOS = ['oneTypo' => 3, 'twoTypos' => 6];
 
     /**
+     * Meilisearch's default rules put `sort` after words, typo, proximity
+     * and attribute, so a requested order (price, rating, name) would only
+     * break relevance ties. Like the local engine, a chosen sort orders the
+     * whole result set; without a `sort` parameter the rule is a no-op and
+     * the remaining (default-order) rules rank by relevance. `attribute` is
+     * the v1 rule name every 1.x server accepts (newer servers also offer it
+     * split into `attributeRank` + `wordPosition`).
+     */
+    public const array RANKING_RULES = ['sort', 'words', 'typo', 'proximity', 'attribute', 'exactness'];
+
+    /**
      * @param  list<string>  $markets
      * @return list<string> sorted
      */
@@ -56,6 +67,7 @@ final class SettingsSchema
             'searchableAttributes' => $searchable,
             'filterableAttributes' => $filterable,
             'sortableAttributes' => $sortable,
+            'rankingRules' => self::RANKING_RULES,
             'typoTolerance' => [
                 'enabled' => true,
                 'minWordSizeForTypos' => self::MIN_WORD_SIZE_FOR_TYPOS,

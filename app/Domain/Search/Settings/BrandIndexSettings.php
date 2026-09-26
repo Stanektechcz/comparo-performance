@@ -9,7 +9,7 @@ use App\Domain\Search\Contracts\SearchIndex;
  */
 final readonly class BrandIndexSettings implements IndexSettings
 {
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     public const array SEARCHABLE = ['name', 'aliases'];
 

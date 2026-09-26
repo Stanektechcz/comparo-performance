@@ -33,7 +33,8 @@ use Tests\Feature\Search\Support\SearchScenario;
  * The behavioural contract every search engine adapter must meet
  * (docs/architecture/phase-3-search.md §3), on the imported prototype demo.
  * Runs against the database engine always and against Meilisearch only when
- * MEILISEARCH_HOST answers (skipped with the reason otherwise).
+ * MEILISEARCH_HOST answers and accepts MEILISEARCH_KEY (skipped with the
+ * reason otherwise).
  */
 dataset('engines', [
     'database engine' => ['database'],
@@ -285,6 +286,7 @@ it('builds Meilisearch filters only from typed, allow-listed values', function (
         ->and($queries['test_brands']['hitsPerPage'])->toBe(0)
         ->and($queries['test_brands'])->not->toHaveKey('filter')
         ->and($queries['test_merchants'])->not->toHaveKey('sort')
+        ->and($queries['test_products'])->not->toHaveKey('matchingStrategy')
         ->and(refs($results))->toBe(['product:6', 'product:29'])
         ->and($results->total)->toBe(12)
         ->and($results->facets->typeCounts)->toBe(['all' => 15, 'product' => 12, 'brand' => 1, 'shop' => 0, 'category' => 0, 'ingredient' => 2])
@@ -339,6 +341,7 @@ it('suggests through one federated multi-search with market visibility filters',
         ->and($queries['test_products']['filter'])->toBe(['markets.CZ.compliance IN ["allowed", "restricted", "unknown"]', 'NOT blocked_markets = "CZ"'])
         ->and($queries['test_merchants']['filter'])->toBe(['shipping_markets = "CZ"'])
         ->and($queries['test_products']['attributesToRetrieve'])->toBe(['id', 'name', 'slug'])
+        ->and(array_unique(array_column($body['queries'], 'matchingStrategy')))->toBe(['all'])
         ->and(array_map(static fn (SuggestItem $item): array => [$item->type->value, $item->id, $item->label, $item->slug], $suggestions->items))->toBe([
             ['product', 10, 'Creatine Monohydrate Micronized', 'creatine-monohydrate'],
             ['shop', 1, 'PeakSupps', 'peaksupps'],
