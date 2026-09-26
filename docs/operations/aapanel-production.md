@@ -149,6 +149,7 @@ sudo -u www env DEPLOY_ROOT=/www/wwwroot/comparo \
   GIT_REPO=git@github.com:Stanektechcz/comparo-performance.git \
   RUN_SMOKE_TEST=false \
   bash tools/deploy/deploy.sh main
+/etc/init.d/php-fpm-84 reload        # jako root: PHP-FPM opcache/realpath cache jinak drží starý release
 ```
 
 Skript: klon release → `composer install --no-dev` → `npm ci` → `npm run build:ssr` → `migrate --force`
@@ -201,13 +202,14 @@ selže kontrola produktové stránky — to je známý stav do dokončení F-21�
 cd /www/wwwroot/comparo/deployer && sudo -u www git pull
 sudo -u www env DEPLOY_ROOT=/www/wwwroot/comparo GIT_REPO=git@github.com:Stanektechcz/comparo-performance.git \
   bash tools/deploy/deploy.sh <tag-nebo-commit> [--maintenance]
+/etc/init.d/php-fpm-84 reload        # jako root, po každém nasazení
 ```
 
 Rollback kódu (migrace se nevracejí automaticky — před nasazením je zkontrolovat):
 
 ```bash
 cd /www/wwwroot/comparo && ls -1 releases                    # vybrat předchozí release
-sudo -u www ln -sfn releases/<predchozi> current
+sudo -u www ln -sfn releases/<predchozi> current && /etc/init.d/php-fpm-84 reload
 sudo -u www php current/artisan optimize && sudo -u www php current/artisan horizon:terminate
 sudo -u www php current/artisan inertia:stop-ssr               # Supervisor SSR znovu spustí
 ```

@@ -185,3 +185,5 @@ deployment sequence").
   `setup-node` by commit SHA to match `tests.yml`; `actions/upload-artifact`
   is pinned by version tag instead because its SHA could not be verified
   offline in this session — replace with a verified SHA pin when convenient.
+
+For an aaPanel server (staging or production) follow [aapanel-production.md](aapanel-production.md).
