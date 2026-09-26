@@ -6,6 +6,8 @@ use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveMarket;
 use App\Http\Middleware\ResolveMerchantContext;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ThrottleSensitiveAuthRoutes;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,9 +27,26 @@ return Application::configure(basePath: dirname(__DIR__))
         // trusted proxies (config/trustedproxy.php, TRUSTED_PROXIES; default none).
         $middleware->append(AssignCorrelationId::class);
 
+        // H-1: only the APP_URL host is accepted (Symfony rejects any other
+        // Host header), so reset and verification links can never be built
+        // for an attacker-supplied host. Inactive locally and in tests.
+        $middleware->trustHosts(
+            at: static function (): array {
+                $host = parse_url((string) config('app.url'), PHP_URL_HOST);
+
+                return is_string($host) && $host !== '' ? ['^'.preg_quote($host).'$'] : [];
+            },
+            subdomains: false,
+        );
+
+        // M-5: a password change invalidates every other session.
+        $middleware->authenticateSessions();
+
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
+            SecurityHeaders::class,
+            ThrottleSensitiveAuthRoutes::class,
             ResolveMarket::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
@@ -35,6 +54,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->api(append: [
+            SecurityHeaders::class,
             ResolveMarket::class,
         ]);
 
