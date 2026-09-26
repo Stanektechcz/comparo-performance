@@ -193,7 +193,9 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
+        // A-39: staging enforces the production password policy (real sign-up
+        // flows are tested there) but stays resettable (no destructive-command ban).
+        Password::defaults(fn (): ?Password => app()->environment('production', 'staging')
             ? Password::min(12)
                 ->mixedCase()
                 ->letters()

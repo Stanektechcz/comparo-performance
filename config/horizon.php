@@ -325,6 +325,29 @@ return [
             ],
         ],
 
+        // A-39: staging runs every production supervisor at minimum scale, so a
+        // job routed to a queue without a supervisor fails there, not in production.
+        'staging' => [
+            'supervisor-1' => [
+                'maxProcesses' => 2,
+            ],
+            'supervisor-feed-import' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-matching' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-pricing' => [
+                'maxProcesses' => 1,
+            ],
+            'supervisor-search' => [
+                'maxProcesses' => 2,
+            ],
+            'supervisor-analytics' => [
+                'maxProcesses' => 1,
+            ],
+        ],
+
         'local' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,

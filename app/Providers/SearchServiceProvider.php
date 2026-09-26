@@ -68,8 +68,9 @@ class SearchServiceProvider extends ServiceProvider
                 throw new InvalidArgumentException("The search driver [{$driver}] is not supported; use meilisearch or a local driver (collection, database, null).");
             }
 
-            if ($app->environment('production')) {
-                throw new RuntimeException("The local search engine (scout.driver [{$driver}]) scans every document per query and is refused in production; set SCOUT_DRIVER=meilisearch.");
+            // A-39: staging runs the production engine so it tests what production runs.
+            if ($app->environment('production', 'staging')) {
+                throw new RuntimeException("The local search engine (scout.driver [{$driver}]) scans every document per query and is refused in production and staging; set SCOUT_DRIVER=meilisearch.");
             }
 
             return new DatabaseSearchEngine($app->make(IndexNames::class));
