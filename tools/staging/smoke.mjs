@@ -316,7 +316,7 @@ async function main() {
     await guarded('guest → merchant portal', '/merchant/feeds');
     await guarded('guest → staff console', '/admin/catalogue/matching');
     await guarded('guest → account settings', '/settings/profile');
-    await guarded('guest → Horizon', '/horizon');
+    await guarded('guest → Horizon', process.env.SMOKE_HORIZON_PATH ?? '/staff/horizon');
     await notFound();
     await asset(home);
     await securityHeaders();
