@@ -68,4 +68,29 @@ return [
     // D-28: live rooms stay disabled; history is still recorded.
     'live-rooms' => (bool) env('FEATURE_LIVE_ROOMS', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Phase 4 reviews & orders flags (A-36)
+    |--------------------------------------------------------------------------
+    |
+    | A-36: reviews-submission and merchant-reviews default on only in
+    | local/testing/demo (App\Domain\Platform\PrototypeImport\DemoEnvironment
+    | ::ALLOWED), and off elsewhere (including production) until moderation
+    | staffing exists (D-08). The env var still wins when set explicitly.
+    |
+    */
+
+    // D-08: shopper review submission. Off in production until moderation
+    // staffing exists.
+    'reviews-submission' => (bool) env(
+        'FEATURE_REVIEWS_SUBMISSION',
+        in_array(env('APP_ENV', 'production'), ['local', 'testing', 'demo'], true),
+    ),
+
+    // Merchant reply/report surface for reviews (owner/manager only).
+    'merchant-reviews' => (bool) env(
+        'FEATURE_MERCHANT_REVIEWS',
+        in_array(env('APP_ENV', 'production'), ['local', 'testing', 'demo'], true),
+    ),
+
 ];

@@ -47,6 +47,22 @@ return [
             'report' => false,
         ],
 
+        // A-35 / docs/architecture/phase-4-reviews-orders.md §5: purchase-proof
+        // receipts. Never public: `serve` is false (no public route serves
+        // this disk's contents) and paths are random, so staff view a
+        // receipt only through the short-lived signed URL
+        // (comparo.verification.signed_receipt_url_minutes). Deleted right
+        // after the verification decision or after
+        // comparo.retention.receipt_max_days, whichever is sooner.
+        'receipts' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/receipts'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

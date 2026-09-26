@@ -28,6 +28,11 @@ enum Feature: string
     case VerificationForwardedEmail = 'verification-forwarded-email';
     case LiveRooms = 'live-rooms';
 
+    // Phase 4 reviews & orders (A-36): env-aware default (on in
+    // local/testing/demo, off elsewhere), not a launch-gated business flag.
+    case ReviewsSubmission = 'reviews-submission';
+    case MerchantReviews = 'merchant-reviews';
+
     /**
      * Whether this flag's state may be exposed to the client (shared Inertia
      * prop). Server-only flags (fetch guards, publishing behaviour) never

@@ -236,6 +236,10 @@ return [
         'label_reviews_min' => 5,
         'label_reviews_recent' => 4,
         'returns_fault' => 3,
+        // A-31: AggregateRating JSON-LD and "rated" summaries need at least
+        // this many real (aggregated) approved reviews; below it the UI
+        // shows "Limited data (n)" instead.
+        'rating_min_reviews' => 5,
     ],
 
     /*
@@ -374,6 +378,10 @@ return [
         // Returns are not a Trust Score input in v1. Changing this needs a
         // published D-10 methodology changelog entry.
         'returns_as_input' => false,
+        // A-32: review-derived trust inputs stay off until the methodology
+        // owner signs (D-10). A merchant/product below rating_min_reviews
+        // gets the neutral "not measured" ranking fallback (4.0), not zero.
+        'review_inputs' => false,
     ],
 
     /*
@@ -386,6 +394,51 @@ return [
         // Shopper-reported delivery/return/dispute events are provisional
         // for this many hours before they count toward a derived figure.
         'shopper_report_provisional_hours' => (int) env('COMPARO_ORDERS_PROVISIONAL_HOURS', 48),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reviews (docs/architecture/phase-4-reviews-orders.md, A-30, A-35)
+    |--------------------------------------------------------------------------
+    */
+
+    'reviews' => [
+        // A-30: a single report never unpublishes a review; a review is
+        // flagged (hidden pending moderation) only once this many distinct
+        // reporters have reported it.
+        'report_flag_threshold' => 3,
+        // Rate limits (§4): a review submission per user, per window.
+        'daily_limit' => 3,
+        'hourly_limit' => 10,
+        // §2 body length bounds (reviews.body column).
+        'body_min' => 20,
+        'body_max' => 5000,
+        // A merchant reply may be edited for this many hours after posting.
+        'reply_edit_hours' => 24,
+        // A-35: receipts are never public, private disk only (see
+        // filesystems.receipts below), deleted right after the decision or
+        // after retention.receipt_max_days; no EXIF stripping library.
+        'receipt_max_mb' => 5,
+        'receipt_types' => ['pdf', 'jpg', 'png', 'webp'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Purchase verification (A-38, D-15, D-27)
+    |--------------------------------------------------------------------------
+    */
+
+    'verification' => [
+        // A-35 / retention.receipt_max_days: a proof (and its receipt) that
+        // is never decided expires after this many days.
+        'proof_expiry_days' => 30,
+        // Staff view a receipt only through a short-lived signed URL
+        // (§4: audited, nosniff, CSP sandbox).
+        'signed_receipt_url_minutes' => 5,
+        // D-27: the inbound forwarded-email webhook (flag
+        // verification-forwarded-email, off) rejects a replayed HMAC +
+        // timestamp signature outside this window.
+        'inbound_replay_window_seconds' => 300,
     ],
 
     /*

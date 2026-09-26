@@ -55,6 +55,42 @@ it('allows a feature-gated route when its flag is enabled', function () {
     $this->get('/__test/feature-gated')->assertOk();
 });
 
+it('defaults reviews-submission and merchant-reviews on in the testing environment (A-36)', function () {
+    $flags = app(FeatureFlags::class);
+
+    expect(app()->environment())->toBe('testing')
+        ->and($flags->enabled(Feature::ReviewsSubmission))->toBeTrue()
+        ->and($flags->enabled(Feature::MerchantReviews))->toBeTrue();
+});
+
+it('defaults reviews-submission and merchant-reviews OFF outside local/testing/demo (A-36)', function () {
+    $originalAppEnv = getenv('APP_ENV');
+
+    putenv('APP_ENV=production');
+    $_ENV['APP_ENV'] = 'production';
+    putenv('FEATURE_REVIEWS_SUBMISSION');
+    unset($_ENV['FEATURE_REVIEWS_SUBMISSION']);
+    putenv('FEATURE_MERCHANT_REVIEWS');
+    unset($_ENV['FEATURE_MERCHANT_REVIEWS']);
+
+    try {
+        // Re-evaluated fresh, bypassing the already-cached app config, so
+        // this asserts the literal env-aware default in the file itself.
+        $features = require base_path('config/features.php');
+
+        expect($features['reviews-submission'])->toBeFalse()
+            ->and($features['merchant-reviews'])->toBeFalse();
+    } finally {
+        if ($originalAppEnv === false) {
+            putenv('APP_ENV');
+            unset($_ENV['APP_ENV']);
+        } else {
+            putenv("APP_ENV={$originalAppEnv}");
+            $_ENV['APP_ENV'] = $originalAppEnv;
+        }
+    }
+});
+
 it('shares only client-visible flags as the features inertia prop', function () {
     config(['features.feed-url-fetch' => false, 'features.matching-auto-publish' => false]);
 

@@ -34,4 +34,15 @@ enum MerchantRole: string
     {
         return $this === self::Owner;
     }
+
+    /**
+     * Owner and manager may reply to, and report, reviews of their merchant
+     * (docs/architecture/phase-4-reviews-orders.md §4). Analysts are
+     * read-only; nobody at merchant level may change a review's score or
+     * status — that stays staff-only (moderation).
+     */
+    public function canReplyToReviews(): bool
+    {
+        return $this === self::Owner || $this === self::Manager;
+    }
 }

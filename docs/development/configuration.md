@@ -44,6 +44,17 @@ itself, change behaviour.
 | `visibility.holdback_ratio` | `0.2` | D-20 | `COMPARO_VISIBILITY_HOLDBACK_RATIO` | Position 1 is never sold, independent of this ratio. |
 | `trust.returns_as_input` | `false` | D-22 | — | Changing this needs a published D-10 methodology changelog entry. |
 | `orders.shopper_report_provisional_hours` | `48` | D-15 | `COMPARO_ORDERS_PROVISIONAL_HOURS` | |
+| `thresholds.rating_min_reviews` | `5` | A-31 | — | `AggregateRating` JSON-LD and "rated" summaries need at least this many real (aggregated) approved reviews; below it the UI says "Limited data (n)". |
+| `trust.review_inputs` | `false` | A-32 | — | Review-derived Trust Score inputs stay off until the methodology owner signs (D-10); below `rating_min_reviews` the ranking fallback is the neutral 4.0, not zero. |
+| `reviews.report_flag_threshold` | `3` | A-30 | — | A single report never unpublishes a review; it is flagged (hidden pending moderation) only once this many distinct reporters report it. |
+| `reviews.daily_limit` / `hourly_limit` | `3` / `10` | §4 | — | Review submission rate limits, per user. |
+| `reviews.body_min` / `body_max` | `20` / `5000` | §2 | — | `reviews.body` length bounds. |
+| `reviews.reply_edit_hours` | `24` | §2 | — | A merchant reply may be edited for this many hours after posting. |
+| `reviews.receipt_max_mb` | `5` | A-35 | — | Receipt upload size limit. |
+| `reviews.receipt_types` | `['pdf','jpg','png','webp']` | A-35 | — | Accepted receipt MIME/extension types. |
+| `verification.proof_expiry_days` | `30` | A-35 / A-38 | — | A proof never decided expires after this many days; matches `retention.receipt_max_days`. |
+| `verification.signed_receipt_url_minutes` | `5` | §4 | — | Lifetime of the signed URL staff use to view a receipt. |
+| `verification.inbound_replay_window_seconds` | `300` | D-27 | — | The forwarded-email webhook (flag `verification-forwarded-email`, off) rejects an HMAC + timestamp signature replayed outside this window. |
 
 Existing keys already representing a D-xx decision (unchanged by this task): `default_market` (D-24),
 `feeds.missing_runs_before_deactivation` / `unseen_days_before_deactivation` / `mass_removal_ratio` /
@@ -70,6 +81,20 @@ ever be turned on.
 | `developers-gate-exempt` | D-21 | `FEATURE_DEVELOPERS_GATE_EXEMPT` |
 | `verification-forwarded-email` | D-27 | `FEATURE_VERIFICATION_FORWARDED_EMAIL` |
 | `live-rooms` | D-28 | `FEATURE_LIVE_ROOMS` |
+| `reviews-submission` | A-36 | `FEATURE_REVIEWS_SUBMISSION` |
+| `merchant-reviews` | A-36 | `FEATURE_MERCHANT_REVIEWS` |
+
+`reviews-submission` and `merchant-reviews` are the exception to "every flag defaults to false": A-36
+defaults them **on** in `local`/`testing`/`demo` (`App\Domain\Platform\PrototypeImport\DemoEnvironment
+::ALLOWED`) and **off** elsewhere, including production, until moderation staffing exists (D-08); the
+env var still wins when set explicitly.
+
+## `config/filesystems.php` — `receipts` disk (A-35)
+
+A private, local-only disk for purchase-proof receipts (`storage/app/private/receipts`): `serve` is
+`false` (no public route ever serves it) and `visibility` is `private`. Receipts are deleted right after
+the verification decision or after `comparo.retention.receipt_max_days` (30), whichever is sooner; staff
+view one only through a signed URL valid for `comparo.verification.signed_receipt_url_minutes`.
 
 ## Decisions represented elsewhere, not as new config
 

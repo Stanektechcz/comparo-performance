@@ -67,6 +67,25 @@ it('holds the ADR-0018 decided values', function (string $key, mixed $expected) 
     'trust.returns_as_input' => ['comparo.trust.returns_as_input', false],
     // D-15
     'orders.shopper_report_provisional_hours' => ['comparo.orders.shopper_report_provisional_hours', 48],
+    // A-31
+    'thresholds.rating_min_reviews' => ['comparo.thresholds.rating_min_reviews', 5],
+    // A-32
+    'trust.review_inputs' => ['comparo.trust.review_inputs', false],
+    // A-30, §4
+    'reviews.report_flag_threshold' => ['comparo.reviews.report_flag_threshold', 3],
+    'reviews.daily_limit' => ['comparo.reviews.daily_limit', 3],
+    'reviews.hourly_limit' => ['comparo.reviews.hourly_limit', 10],
+    'reviews.body_min' => ['comparo.reviews.body_min', 20],
+    'reviews.body_max' => ['comparo.reviews.body_max', 5000],
+    'reviews.reply_edit_hours' => ['comparo.reviews.reply_edit_hours', 24],
+    // A-35
+    'reviews.receipt_max_mb' => ['comparo.reviews.receipt_max_mb', 5],
+    'reviews.receipt_types' => ['comparo.reviews.receipt_types', ['pdf', 'jpg', 'png', 'webp']],
+    // A-38, D-15
+    'verification.proof_expiry_days' => ['comparo.verification.proof_expiry_days', 30],
+    'verification.signed_receipt_url_minutes' => ['comparo.verification.signed_receipt_url_minutes', 5],
+    // D-27
+    'verification.inbound_replay_window_seconds' => ['comparo.verification.inbound_replay_window_seconds', 300],
 ]);
 
 it('defaults every ADR-0018 feature flag to off', function (string $flag) {
