@@ -10,7 +10,7 @@ A new session resumes by reading `CLAUDE.md`, this file, `state.json` and
 |---|---|
 | Phase | **4 — Reviews, orders & purchase verification** (IN PROGRESS — wave 1 done: P4-00, P4-02, P4-03, P4-04; wave 2 READY: P4-05, P4-06; Phases 2 and 3 DONE at Gate C) |
 | Slice | Phase 4 wave 1 landed (schema, pure engines with parity, platform foundations); next: reviews/verification domain actions (P4-05/P4-06) |
-| Branch | `main` includes Phases 2 + 3 (fast-forwarded after each Gate C); Phase 4 work happens on `phase-4/reviews-orders` |
+| Branch | `main` includes Phases 2 + 3 and Phase 4 wave 1 + staging (A-39), deploy kit, security fixes (PR #2 merged `bd6206c`, 2026-09-27); new work branches from `main` |
 | Last green full gate | 2026-09-26 (after P4-02/P4-03) — Pest 2 112 tests (2 101 passed, 11 Meilisearch skipped), 10 852 assertions, SQLite; Larastan L7 0 errors; Pint clean; parity `--check` clean; `npm run check` exit 0; prototype 137/137 |
 | Next task | see `state.json → next_task` and [TASK-GRAPH.md](TASK-GRAPH.md) |
 

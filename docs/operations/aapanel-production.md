@@ -34,7 +34,8 @@ Postup je pro oba režimy stejný; liší se jen `shared/.env` (krok 7).
 | Node.js version manager | Node 24 | build assetů a SSR server |
 
 Composer: `curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer`.
-aaPanel → Website → **PHP CLI version = 8.4** (deploy skript volá `php` z PATH).
+aaPanel → Website → **PHP CLI version = 8.4** a Node.js version manager → Node 24 jako **command line
+version** (deploy skript, Supervisor i cron volají `php`, `node`, `npm`, `composer` z PATH).
 
 ## 3. PHP 8.4
 
@@ -64,13 +65,15 @@ CREATE DATABASE comparo OWNER comparo ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CT
 ```bash
 mkdir -p /opt/meilisearch/data && cd /opt/meilisearch
 curl -L -o meilisearch https://github.com/meilisearch/meilisearch/releases/download/v1.53.2/meilisearch-linux-amd64
-chmod +x meilisearch && chown -R www:www /opt/meilisearch
-openssl rand -hex 32   # = MEILISEARCH master key → shared/.env (MEILISEARCH_KEY)
+chmod +x meilisearch
+KEY=$(openssl rand -hex 32)   # = MEILISEARCH_KEY v shared/.env (krok 7); nikam jinam ho nekopírovat
+printf 'db_path = "/opt/meilisearch/data"\nhttp_addr = "127.0.0.1:7700"\nenv = "production"\nno_analytics = true\nmaster_key = "%s"\n' "$KEY" > config.toml
+chmod 600 config.toml && chown -R www:www /opt/meilisearch && echo "$KEY"; unset KEY
 ```
 
 Supervisor Manager → Add daemon: name `comparo-meilisearch`, user `www`, run dir `/opt/meilisearch`,
-command `/opt/meilisearch/meilisearch --db-path /opt/meilisearch/data --http-addr 127.0.0.1:7700 --master-key <master-key> --env production --no-analytics`.
-Ověřit `curl -s http://127.0.0.1:7700/health` → `{"status":"available"}`.
+command `/opt/meilisearch/meilisearch --config-file-path /opt/meilisearch/config.toml`
+(klíč není vidět v `ps`). Ověřit `curl -s http://127.0.0.1:7700/health` → `{"status":"available"}`.
 
 ## 5. Web v aaPanelu
 
@@ -96,11 +99,16 @@ posílá aplikace sama (`SecurityHeaders` middleware) — v nginx je nezdvojovat
 ## 6. Adresáře a přístup ke GitHubu (repo je privátní)
 
 ```bash
+getent passwd www | cut -d: -f6          # musí být /home/www (jinak níže použít vypsanou cestu)
 mkdir -p /www/wwwroot/comparo/{releases,shared/storage} && chown -R www:www /www/wwwroot/comparo
-mkdir -p /home/www/.ssh && chown www:www /home/www/.ssh
+mkdir -p /home/www/.ssh && chown -R www:www /home/www && chmod 700 /home/www/.ssh
+sudo -u www bash -c 'php -v | head -1; node -v; npm -v; composer -V; git --version'   # vše musí odpovědět
 sudo -u www ssh-keygen -t ed25519 -N '' -f /home/www/.ssh/comparo_deploy
 cat /home/www/.ssh/comparo_deploy.pub
 ```
+
+`/home/www` musí patřit `www` — `npm ci` a Composer do něj zapisují cache; s rootem jako vlastníkem
+`npm ci` v deployi selže na `EACCES`.
 
 GitHub → repo → Settings → Deploy keys → Add (read-only) s tímto veřejným klíčem. Pak:
 
@@ -133,7 +141,7 @@ Upravit (ostatní hodnoty šablony ponechat):
 | `REDIS_PASSWORD` | z kroku 4 | z kroku 4 |
 | `REDIS_PREFIX` / `CACHE_PREFIX` / `SCOUT_PREFIX` | `comparo_staging_` / `comparo_staging_cache_` / `staging_` | `comparo_` / `comparo_cache_` / `prod_` |
 | `MEILISEARCH_KEY` | master key z kroku 4 | master key z kroku 4 |
-| `COMPARO_DEMO_ACCOUNTS` | `true` | `false` |
+| `COMPARO_DEMO_ACCOUNTS` | `true` | **`false`** (šablona má `true`) |
 | `COMPARO_DEMO_PASSWORD` | silné heslo (nebo prázdné = náhodné, vypíše se jednou) | — |
 | `MAIL_*` | SMTP sandbox | produkční SMTP |
 | `PASSKEYS_USER_HANDLE_SECRET` | `openssl rand -hex 32` | `openssl rand -hex 32` |
@@ -154,15 +162,29 @@ sudo -u www env DEPLOY_ROOT=/www/wwwroot/comparo \
 
 Skript: klon release → `composer install --no-dev` → `npm ci` → `npm run build:ssr` → `migrate --force`
 → role a oprávnění → `optimize` → přepnutí `current` → synchronizace nastavení vyhledávání → restart Horizon/SSR.
-Pak (jen poprvé):
+Teď dokončit krok 5.2 (Site directory `.../current`, Running directory `/public`). Pak jen poprvé:
+
+**A. staging/demo** — demo data, demo účty a index:
 
 ```bash
 cd /www/wwwroot/comparo/current
-sudo -u www php artisan db:seed --force                 # A: demo data + demo účty; B: jen role
+sudo -u www php artisan db:seed --force
 sudo -u www php artisan comparo:search:reindex
 ```
 
-Teď dokončit krok 5.2 (Site directory `.../current`, Running directory `/public`).
+**B. produkce** — role už založil deploy; `db:seed` nespouštět (s `COMPARO_DEMO_ACCOUNTS=true`
+ho produkce odmítne). První super-admin, dokud není příkaz z F-21:
+
+1. Zaregistrovat se na `https://<domena>/register` vlastním e-mailem a heslem (min. 12 znaků, velká
+   i malá písmena, číslice, symbol; heslo nesmí být v databázi uniklých hesel).
+2. Na serveru přidělit roli a potvrdit e-mail (e-mail doplnit, heslo se nikde nezadává):
+
+```bash
+cd /www/wwwroot/comparo/current
+sudo -u www php artisan tinker --execute '$u = App\Models\User::where("email", "<email>")->firstOrFail(); $u->forceFill(["email_verified_at" => now()])->save(); $u->assignRole("super-admin"); echo $u->getRoleNames();'
+```
+
+3. Hned po přihlášení zapnout 2FA na `/settings/security` (Security settings); vynucení je až F-20.
 
 ## 9. Procesy na pozadí
 
