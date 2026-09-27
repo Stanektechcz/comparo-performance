@@ -8,6 +8,7 @@ use App\Domain\Merchants\MerchantStatus;
 use App\Domain\Offers\LinkStatus;
 use App\Domain\Offers\Ranking\RankingWeights;
 use App\Domain\Platform\PrototypeImport\DemoDataRefused;
+use App\Domain\Platform\PrototypeImport\DemoEnvironment;
 use App\Domain\Platform\PrototypeImport\PrototypeSnapshotImporter;
 use App\Domain\Pricing\CouponType;
 use App\Domain\Pricing\History\SnapshotSource;
@@ -211,6 +212,18 @@ it('refuses demo seeding in production', function () {
         ->and(DB::table('roles')->count())->toBe(0)
         ->and(DB::table('users')->count())->toBe(0);
 });
+
+it('allows the labelled demo dataset in staging but never in production', function (string $environment, bool $allowed) {
+    app()->detectEnvironment(fn () => $environment);
+
+    expect(DemoEnvironment::isAllowed())->toBe($allowed);
+})->with([
+    'local' => ['local', true],
+    'demo' => ['demo', true],
+    'staging (A-39)' => ['staging', true],
+    'production' => ['production', false],
+    'unknown' => ['preview', false],
+]);
 
 it('seeds only reference data when demo data is disabled', function () {
     config(['comparo.demo.enabled' => false]);

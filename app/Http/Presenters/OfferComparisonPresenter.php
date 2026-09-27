@@ -402,10 +402,16 @@ final class OfferComparisonPresenter
     }
 
     /**
-     * Merchant URLs come from feeds (untrusted): only absolute http(s) URLs are ever emitted.
+     * Merchant URLs come from feeds and merchant profiles (untrusted): only
+     * absolute http(s) URLs are ever emitted, so no `javascript:` or `data:`
+     * link can reach an href.
      */
-    private static function safeOutboundUrl(string $url): ?string
+    public static function safeOutboundUrl(?string $url): ?string
     {
+        if ($url === null) {
+            return null;
+        }
+
         $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
 
         return in_array($scheme, ['http', 'https'], true) && filter_var($url, FILTER_VALIDATE_URL) !== false ? $url : null;

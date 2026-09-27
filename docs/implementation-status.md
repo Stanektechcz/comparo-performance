@@ -7,12 +7,20 @@ No browser (manual or automated E2E) verification of authenticated merchant/staf
 for the Phase 2 feeds/matching UI; the public search page was checked once at 375 px during development
 (no screenshots). Coverage below is otherwise Pest Feature/Unit tests only.
 
+**Latest full gate** (2026-09-26, after P4-02/P4-03, Phase 4 wave 1): Pest **2 112 tests** — 2 101 passed,
+11 skipped (the Meilisearch contract dataset without a local server), 10 852 assertions, SQLite; Larastan
+level 7 — 0 errors; Pint clean; prototype parity `--check` clean; `npm run check` exit 0; `php artisan
+comparo:verify-prototype` 137/137.
+
 **Quality gates at Phase 3 Gate C** (2026-09-26): Pest **1 803 tests** — 1 792 passed, 11 skipped (the
-Meilisearch contract dataset: no local server; CI now provides one) — on SQLite (9 675 assertions) **and**
+Meilisearch contract dataset: no local server at the time) — on SQLite (9 675 assertions) **and**
 on PostgreSQL 18.4 (embedded, local; CI uses PostgreSQL 16) (9 672 assertions — driver-specific schema
 assertions differ), Pint clean, Larastan level 7 — 0 errors, prototype parity `--check` clean (matching,
 anomalies and search fixtures), `npm run types:check` / `check` / `build:ssr` all exit 0,
-`php artisan comparo:verify-prototype` 137/137. GitHub Actions has never run (no git remote).
+`php artisan comparo:verify-prototype` 137/137. Git remote `Stanektechcz/comparo-performance` (private)
+and GitHub Actions CI (`.github/workflows/tests.yml`: SQLite, PostgreSQL 16 + Meilisearch 1.53.2 service,
+frontend) now exist and ran green on PR #1 (merged to main). Meilisearch 1.53.2 has also been verified
+locally against a real server: engine contract dataset 48/48.
 
 ## Modules
 
@@ -33,11 +41,11 @@ anomalies and search fixtures), `npm run types:check` / `check` / `build:ssr` al
 | Product page | `buildProduct` | ProductOfferComparison + presenters | — | full page, responsive, a11y dialogs | ProductPageTest | FUNCTIONAL | reviews/community sections (Phase 4/9); alerts/save/compare intentionally absent |
 | Public offers API v1 | `GET /products/{slug}/offers` | presenter (snake_case) | `/api/public/v1/products/{slug}/offers` | — | PublicOffersApiTest | FUNCTIONAL | API keys/entitlements (Phase 10) |
 | SEO head / SSR | per-page meta, JSON-LD | SeoPresenter; Blade fallback + Inertia `<Head>` | — | seo-head | ProductPageTest (SEO head) | FUNCTIONAL | sitemaps, robots route, llms.txt, RSS, hreflang per market (Phase 12) |
-| Demo data | all seeds | PrototypeSnapshotImporter + Demo*Seeders (time-anchored, idempotent) | — | — | DemoDataSeederTest | FUNCTIONAL | only Phase 1 entities imported |
-| Parity harness | intel.js, HTML engines | tools/prototype-parity/export-fixtures.mjs | — | — | `--check` in CI | FUNCTIONAL | reviews, matching, dosing, delivery fixtures exported but not yet ported |
+| Demo data | all seeds | PrototypeSnapshotImporter + Demo*Seeders (time-anchored, idempotent); importer also imports brand aliases and listed ingredients, not just core Phase 1 entities | — | — | DemoDataSeederTest | FUNCTIONAL | only Phase 1 entities imported |
+| Parity harness | intel.js, HTML engines | tools/prototype-parity/export-fixtures.mjs | — | — | `--check` in CI | FUNCTIONAL | matching, reviews and delivery fixtures are ported (see rows below); only dosing fixtures remain unported |
 | Audit log | `S.auditLog` | `Platform\Audit\AuditLogger`/`AuditRedactor`, `AuditAction` (18 cases); audit_logs (append-only, DB trigger, actor FK decoupled from `users` — ADR-0014) | — | — | AppendOnlyHistoryTest; assertions inline in Feeds/Matching Feature tests | FUNCTIONAL | no dedicated audit-log viewer page yet; only Feeds/Matching actions are audited so far, not every privileged action platform-wide |
 | Feature flags | — (new, A-17) | `Platform\Features\{Feature,FeatureFlags}`, config-backed (`config/features.php`), fail-closed via `feature:` route middleware | shared Inertia prop (`clientFlags()`) | gates `/merchant/*` (404 when off) | route-level feature tests | FUNCTIONAL | config-only (no DB-backed store); Pennant deferred |
-| Search & discovery | search, synonyms, facets, header suggest | `App\Domain\Search\**` (see `docs/modules/search.md`), `SearchServiceProvider` (engine binding by `scout.driver`) | `search`, `search.clicks`, `api.public.v1.search.suggest` | `resources/js/pages/search/index.tsx`, header suggest combobox | `tests/Unit/Search/**`, `tests/Feature/Search/**`, `tests/Unit/Parity/{SearchParityTest,SearchSensitivityTest}.php`, `tests/Architecture/{SearchBoundariesTest,SearchJobsTest}.php` | `DatabaseSearchEngine` relevance: **PARITY VERIFIED**; overall module: FUNCTIONAL | Meilisearch adapter never run against a real local server (CI service only, GitHub Actions never executed); no browser check of the search page; cold-cache fan-out cost not load-tested (F-15); indexing batch/chunk sizing not load-tested for many markets (F-17); did-you-mean absent on Meilisearch (falls straight to "browse categories") |
+| Search & discovery | search, synonyms, facets, header suggest | `App\Domain\Search\**` (see `docs/modules/search.md`), `SearchServiceProvider` (engine binding by `scout.driver`) | `search`, `search.clicks`, `api.public.v1.search.suggest` | `resources/js/pages/search/index.tsx`, header suggest combobox | `tests/Unit/Search/**`, `tests/Feature/Search/**`, `tests/Unit/Parity/{SearchParityTest,SearchSensitivityTest}.php`, `tests/Architecture/{SearchBoundariesTest,SearchJobsTest}.php` | `DatabaseSearchEngine` relevance: **PARITY VERIFIED**; overall module: FUNCTIONAL | Meilisearch adapter now verified against a real local server (engine contract dataset 48/48) and against the CI service (GitHub Actions ran green on PR #1); no browser check of the search page; cold-cache fan-out cost (F-15) and indexing batch/chunk sizing (F-17) load-tested and RESOLVED — see BACKLOG.md; ProductMarketSnapshot still issues one offer comparison per product × market instead of the bulk path (F-18, open); did-you-mean absent on Meilisearch (falls straight to "browse categories") |
 | Search analytics | zero-result demand, click attribution | `Search\Analytics\{RecordSearch,RecordSearchClick,QueryRedactor,SessionHasher,AggregateSearchDemand,SearchDemandReport,PruneSearchAnalytics}` | — | — | `tests/Feature/Search/Analytics*Test.php` | FUNCTIONAL | k-threshold sums daily sessions rather than deduplicating across days (weaker than distinct-session k-anonymity), DPO sign-off pending (F-16, A-24); D-09 retention periods are safe defaults, not signed off |
 | Multi-currency comparison | — (prototype markets are single-currency) | `Pricing\Currency\{ExchangeRates,ComparisonRates}`, `Pricing\LandedPrice\MerchantTermsConverter` (ADR-0017) | embedded in product page + search props, `meta.market_min_currency` | product page, search result cards | `tests/Unit/Pricing/**`, `tests/Feature/Search/IndexingMarketCurrencyTest.php` | FUNCTIONAL (single-currency paths: **PARITY VERIFIED**, byte-identical to the prototype) | no browser check; real ECB rate import still pending (D-06) — `exchange_rates` is demo data |
 | Feeds & matching (pipeline) | Feed Match Center | `App\Domain\Feeds\**`, `App\Domain\Matching\**` (see `docs/modules/{feeds,matching}.md`) | — | — | `tests/Feature/Feeds/**`, `tests/Feature/Matching/**`, `tests/Architecture/{FeedJobsTest,MatchingBoundariesTest}.php` | FUNCTIONAL (matching engine itself: **PARITY VERIFIED**, see below) | purchase links still go directly to merchants until Phase 5; feed-level shipping stored raw only (D-07); availability-map editing not in the merchant form; `api_push` transport not implemented; canonical-product creation from an approved candidate deferred to Phase 8; no notification on run completion/failure |
@@ -46,7 +54,7 @@ anomalies and search fixtures), `npm run types:check` / `check` / `build:ssr` al
 | Merchant portal — matching | (simulated in prototype only) | `Matching\Queries\MerchantMatchingQueue`, `Matching\Actions\{DecideMatch,ProposeProductCandidate}` behind `MerchantProductPolicy` | — | `resources/js/pages/merchant/matching/**` | `tests/Feature/Merchant/MerchantMatchingTest.php`, `tests/Feature/Matching/**` | FUNCTIONAL | — |
 | Staff console — catalogue matching only | `/intel` admin views | `Admin\Catalogue\{MatchingQueueController,MatchingListingController,ListingDecisionController,ListingRematchController,CandidateResolutionController,ConflictResolutionController,ProductSearchController}` behind `matching.review`(+`offers.manage`) | — | `resources/js/pages/admin/catalogue/matching/**` | `tests/Feature/Admin/CatalogueMatchingTest.php` | FUNCTIONAL | only the matching queue exists in the staff console; no other staff console area is built (merchants, compliance, SEO, etc. remain Phase 8 scope) |
 | Offers write path & events | `PublishOffer`/`RecordPriceSnapshot`/`DeactivateOffer`/`ConfirmListingsSeen`; `OfferPublished`/`OfferDeactivated`/`OfferRelinked`/`PriceChanged`/`ProductMatched` events | `App\Domain\Offers\Actions\**`, `App\Domain\Pricing\Actions\**`, `App\Domain\Platform\Listeners\BumpProductCacheVersion` | — | offer changes visible on next product page view (cache-bumped) | `tests/Feature/Feeds/FeedPublishingTest.php`, event-level assertions across Feeds/Matching Feature tests | FUNCTIONAL | snapshot-writing-inside-transaction amends ADR-0003 (ADR-0013); no dedicated event/notification consumer for `FeedImported`/`FeedFailed` yet |
-| Reviews / verification / orders | reviews, proofs, orders | — (derived ratings imported, labelled) | — | rating summary only | fixtures only | NOT STARTED | Phase 4 |
+| Reviews / verification / orders | reviews, proofs, orders | schema (5 migrations, 15 models, 16 enums, factories, append-only triggers) + pure engines with exact parity (ReviewTrust, ReviewWeight, RatingAggregator, abuse signals, DeliveryStatsCalculator) | — | rating summary only | `tests/Unit/{Reviews,Orders}` | IN PROGRESS | Phase 4 (wave 1 done: P4-02/P4-03; domain actions, HTTP/UI, moderation and verification still to build) |
 | Affiliate redirect & conversions | `#/go`, reconciliation | — | — | purchase links go directly to the merchant URL | — | NOT STARTED | Phase 5 (`/go/{merchant}/{product}`) |
 | Account: saved, compare, basket, alerts | yes | — | — | — | — | NOT STARTED | Phase 6 |
 | Merchant dashboard | yes | membership + read-only offers API | partial | — | — | NOT STARTED | Phase 7 |
@@ -54,7 +62,8 @@ anomalies and search fixtures), `npm run types:check` / `check` / `build:ssr` al
 | Community / reputation / live / gamification | yes | — | — | — | — | NOT STARTED | Phase 9 |
 | Commercial OS | yes | — (commercial data deliberately not imported) | — | — | — | NOT STARTED | Phase 10 |
 | Growth OS | yes | — | — | — | — | NOT STARTED | Phase 11 |
-| Feature flags, GDPR export/erase | yes | — | — | — | — | NOT STARTED | — |
+| GDPR export/erase | yes | — | — | — | — | NOT STARTED | — |
+| Staging environment | — (new, A-39) | `tools/staging/{smoke,local-stack}.mjs`, `.env.staging.example` | — | — | smoke script | FUNCTIONAL locally | no hosted staging server yet (domain/TLS/hosting decision — see EXTERNAL-DEPENDENCIES.md) |
 
 ## Invariant coverage
 

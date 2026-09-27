@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -52,12 +54,21 @@ class SecurityController extends Controller
 
     /**
      * Update the user's password.
+     *
+     * M-5: the remember token is rotated (stale "remember me" cookies stop
+     * working) and every other session is signed out through AuthenticateSession;
+     * the current device is re-remembered with the new token when it was.
      */
     public function update(PasswordUpdateRequest $request): RedirectResponse
     {
-        $request->user()->update([
-            'password' => $request->password,
-        ]);
+        $password = (string) $request->validated('password');
+
+        $request->user()->forceFill([
+            'password' => $password,
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        Auth::logoutOtherDevices($password);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
 

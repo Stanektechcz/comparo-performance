@@ -110,7 +110,7 @@ it('remembers every rejected product of the listing, not only the latest', funct
 
     expect($outcome->productId)->toBeNull()
         ->and($outcome->status)->toBe(ListingMatchStatus::Unmatched)
-        ->and(MatchingDecision::query()->where('kind', MatchDecisionKind::Rejected)->pluck('previous_product_id')->all())
+        ->and(MatchingDecision::query()->where('kind', MatchDecisionKind::Rejected)->orderBy('id')->pluck('previous_product_id')->all())
         ->toBe([$first->id, $second->id]);
 });
 

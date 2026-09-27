@@ -143,4 +143,60 @@ class Merchant extends Model
     {
         return $this->belongsToMany(User::class)->withPivot('role')->withTimestamps();
     }
+
+    /**
+     * Shop reviews of this merchant (merchant subject; all states).
+     *
+     * @return HasMany<Review, $this>
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Reviews (product or shop) whose author bought from this merchant.
+     *
+     * @return HasMany<Review, $this>
+     */
+    public function purchasedFromReviews(): HasMany
+    {
+        return $this->hasMany(Review::class, 'purchased_from_merchant_id');
+    }
+
+    /**
+     * Purchase proofs naming this merchant as the seller.
+     *
+     * @return HasMany<PurchaseProof, $this>
+     */
+    public function purchaseProofs(): HasMany
+    {
+        return $this->hasMany(PurchaseProof::class);
+    }
+
+    /**
+     * @return HasMany<ReviewReply, $this>
+     */
+    public function reviewReplies(): HasMany
+    {
+        return $this->hasMany(ReviewReply::class);
+    }
+
+    /**
+     * The real-review rating projection (source `aggregated`), if computed.
+     *
+     * @return HasOne<RatingAggregate, $this>
+     */
+    public function ratingAggregate(): HasOne
+    {
+        return $this->hasOne(RatingAggregate::class);
+    }
+
+    /**
+     * @return HasMany<Order, $this>
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
 }

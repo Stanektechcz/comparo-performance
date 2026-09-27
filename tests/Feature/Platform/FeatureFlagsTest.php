@@ -55,6 +55,54 @@ it('allows a feature-gated route when its flag is enabled', function () {
     $this->get('/__test/feature-gated')->assertOk();
 });
 
+it('defaults reviews-submission and merchant-reviews on in the testing environment (A-36)', function () {
+    $flags = app(FeatureFlags::class);
+
+    expect(app()->environment())->toBe('testing')
+        ->and($flags->enabled(Feature::ReviewsSubmission))->toBeTrue()
+        ->and($flags->enabled(Feature::MerchantReviews))->toBeTrue();
+});
+
+it('defaults reviews-submission and merchant-reviews OFF outside local/testing/demo (A-36)', function () {
+    // env() reads $_SERVER first, then $_ENV, then getenv(): a .env that sets the
+    // flags explicitly (CI copies .env.example) must not leak into this check.
+    $keys = ['APP_ENV', 'FEATURE_REVIEWS_SUBMISSION', 'FEATURE_MERCHANT_REVIEWS'];
+    $saved = [];
+
+    foreach ($keys as $key) {
+        $saved[$key] = [$_SERVER[$key] ?? null, $_ENV[$key] ?? null, getenv($key)];
+        unset($_SERVER[$key], $_ENV[$key]);
+        putenv($key);
+    }
+
+    $_SERVER['APP_ENV'] = $_ENV['APP_ENV'] = 'production';
+    putenv('APP_ENV=production');
+
+    try {
+        // Re-evaluated fresh, bypassing the already-cached app config, so
+        // this asserts the literal env-aware default in the file itself.
+        $features = require base_path('config/features.php');
+
+        expect($features['reviews-submission'])->toBeFalse()
+            ->and($features['merchant-reviews'])->toBeFalse();
+    } finally {
+        foreach ($saved as $key => [$server, $env, $process]) {
+            unset($_SERVER[$key], $_ENV[$key]);
+            putenv($key);
+
+            if ($server !== null) {
+                $_SERVER[$key] = $server;
+            }
+            if ($env !== null) {
+                $_ENV[$key] = $env;
+            }
+            if ($process !== false) {
+                putenv("{$key}={$process}");
+            }
+        }
+    }
+});
+
 it('shares only client-visible flags as the features inertia prop', function () {
     config(['features.feed-url-fetch' => false, 'features.matching-auto-publish' => false]);
 

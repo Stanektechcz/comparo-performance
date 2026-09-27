@@ -6,12 +6,12 @@ Later phases (4+: purchase links/`/go`, review moderation, ranking lab, billing,
 
 | Prototype feature | Laravel route(s) | Backend service | Entity | Page | Tests | Status |
 |---|---|---|---|---|---|---|
-| Product catalogue browse/search | `products.index`, `products.show`, `categories.*`, `brands.*` | Catalog queries | `products`, `categories`, `brands` | `resources/js/pages/products/*`, `categories/*`, `brands/*` | `tests/Feature/Catalog/**` | FUNCTIONAL |
-| Merchant shop pages | `shops.index`, `shops.show` | Catalog queries | `merchants` | `resources/js/pages/shops/*` | `tests/Feature/Catalog/**` | FUNCTIONAL |
+| Product catalogue browse/search | `products.index`, `products.show`, `categories.*`, `brands.*` | Catalog queries | `products`, `categories`, `brands` | `resources/js/pages/catalog/{products,categories,brands}/*` | `tests/Feature/Catalog/{CatalogPagesTest,ProductPageTest}.php` | FUNCTIONAL |
+| Merchant shop pages | `shops.index`, `shops.show` | Catalog queries | `merchants` | `resources/js/pages/catalog/shops/*` | `tests/Feature/Catalog/CatalogPagesTest.php` | FUNCTIONAL |
 | Best-buy ranking | (embedded in product page props) | `Offers\Ranking\RankingService` | `ranking_versions`, offers | product page | `tests/Unit/Ranking/**`, `tests/Feature/Parity/**` | PARITY VERIFIED |
 | Landed price / coupons | (embedded in product page props) | `Pricing\LandedPrice\LandedPriceCalculator` | `coupons`, `coupon_country` | product page | `tests/Unit/Pricing/**` | PARITY VERIFIED |
 | Price history / trend / badge | (embedded in product page props) | `Pricing\History\PriceHistoryAnalyzer` | `price_snapshots`, `market_price_stats` | product page | `tests/Unit/Pricing/**` | PARITY VERIFIED |
-| Compliance gate (`comp()`) | (server-side, all product/offer surfaces) | `Compliance\Queries\ComplianceResolver` | `product_compliance_rules` | all catalogue pages | `tests/Feature/Compliance/**` | FUNCTIONAL |
+| Compliance gate (`comp()`) | (server-side, all product/offer surfaces) | `Compliance\Queries\ComplianceResolver` | `product_compliance_rules` | all catalogue pages | `tests/Unit/Compliance/ComplianceStatusTest.php`, `tests/Feature/Catalog/ProductPageTest.php` | FUNCTIONAL |
 | **Merchant feed creation & config** | `merchant.feeds.{index,create,store,show,edit,update}` | `Feeds\Actions\{CreateFeedSource,UpdateFeedSource}` | `feed_sources` | `resources/js/pages/merchant/feeds/{index,create,edit,show}.tsx` | `tests/Feature/Feeds/FeedSourceActionsTest.php`, `tests/Feature/Merchant/MerchantFeedsTest.php` | FUNCTIONAL |
 | **Feed field mapping** | `merchant.feeds.mapping.{edit,update}` | `Feeds\Actions\SaveFeedMapping` | `feed_mappings` | `resources/js/pages/merchant/feeds/mapping.tsx` | `tests/Feature/Feeds/FeedSourceActionsTest.php` | FUNCTIONAL |
 | **Feed credentials** | `merchant.feeds.credentials.{confirm,update}` | `Feeds\Actions\UpdateFeedCredentials` | `feed_sources.credentials` | (modal on show page) | `tests/Feature/Feeds/FeedSourceActionsTest.php` | FUNCTIONAL |

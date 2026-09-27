@@ -49,3 +49,23 @@ Design: [`docs/architecture/phase-3-search.md`](../architecture/phase-3-search.m
 | P3-09 | Review council + fixes + docs (ADR-0016, matrices, status) + Gate C + merge | all | orchestrator | all five | docs/** | Gate C green | DONE | 5833251 + docs |
 | P3-10 | Multi-currency correctness for ranking inputs and market stats (market min, price factor, listing tie-break compare minor units across currencies) — normalise via the comparison currency, keep single-currency parity byte-identical | P3-03 | pricing-engineer → `task-deep` | qa-parity-engineer, architecture-guardian | app/Domain/Offers/Queries/**, app/Domain/Pricing/MarketStats/**, app/Domain/Offers/Ranking (context building only), tests for mixed markets | ranking/landed/market-stats parity unchanged; mixed-market tests | DONE | a07fd8b |
 | P3-11 | Never crash on shipping/coupon currency mismatches in landed prices (convert in the query layer); explicit `meta.market_min_currency`; currency on `topEligibleTotal` | P3-10 | pricing-engineer → `task-deep` | qa-parity-engineer | app/Domain/Pricing/{LandedPrice,Currency}/**, app/Domain/Offers/Queries/**, app/Http/Presenters/{OfferComparisonPresenter,PriceHistoryPresenter}.php, tests/Feature/Catalog/ShippingCurrencyMismatchTest.php | public path cannot throw; parity unchanged | DONE | 5e60689 |
+
+# Task graph — Phase 4 (reviews, orders & purchase verification)
+
+Design: [`docs/architecture/phase-4-reviews-orders.md`](../architecture/phase-4-reviews-orders.md). Branch `phase-4/reviews-orders`.
+
+| ID | Title | Deps | Owner | Files (exclusive) | Acceptance | Status | Commit |
+|---|---|---|---|---|---|---|---|
+| P4-00 | Apply ADR-0018 configuration + feature flags (all new flags off) | — | platform-engineer | config/{comparo,features}.php, Feature enum, docs/development/configuration.md | decided values tested; parity unchanged | DONE | 0227eab |
+| P4-01 | Analyses → design + A-30…A-38 + task graph | — | orchestrator | docs | 2 analyses integrated | DONE | |
+| P4-02 | Schema: reviews, signals, moderation events, votes, reports, replies, proofs, rating aggregates, orders, items, events, returns, disputes, notifications | P4-01 | database-engineer | database/migrations/2026_09_27_*, app/Models (new), enums, factories | both drivers; append-only triggers; isolation columns | DONE | 314e80d |
+| P4-03 | Pure engines + parity (ReviewTrust, ReviewWeight, RatingAggregator, abuse heuristics, DeliveryStatsCalculator) | P4-01 | reviews-orders-engineer | app/Domain/Reviews/{Credibility,Aggregation,Abuse}, app/Domain/Orders/Delivery, tools/prototype-parity/{reviews,delivery}.mjs, fixtures, tests/Unit/{Reviews,Orders} | exact parity + sensitivity | DONE | f183300 |
+| P4-04 | Platform: config keys, flags (reviews-submission, merchant-reviews), receipts disk, request fingerprint (hashes), AuditAction cases, MerchantRole::canReplyToReviews | P4-00 | platform-engineer | config, Feature enum, filesystems, app/Domain/Platform/Fraud, AuditAction, MerchantRole | tests | DONE | eb4c7c9 |
+| P4-05 | Reviews domain (submit, moderate, vote, report, reply, recompute + projection, cache/search hooks, demo labelling rules) | P4-02..04 | reviews-orders-engineer | app/Domain/Reviews/{Actions,Queries,Events,Listeners,Jobs,Moderation} | domain tests | READY | |
+| P4-06 | Verification (4 methods, Null click ledger, signed inbound simulator, receipts, purge) + orders from evidence + delivery events | P4-02, P4-04 | reviews-orders-engineer | app/Domain/{Verification,Orders}/** (non-pure) | domain tests | READY | |
+| P4-07 | Public + account HTTP/UI, SEO/demo-label fixes | P4-05, P4-06 | full-stack | routes/reviews.php, Controllers/{Reviews,Account}, presenters, resources/js | HTTP + a11y | BLOCKED | |
+| P4-08 | Merchant portal reviews (reply, report, resolved) | P4-05 | merchant-platform-engineer | routes/merchant.php, Controllers/Merchant/Reviews, pages | isolation datasets | BLOCKED | |
+| P4-09 | Staff moderation + verification consoles (signed receipt URLs) | P4-05, P4-06 | admin-platform-engineer | routes/admin.php, Controllers/Admin/{Moderation,Verification}, pages | permission datasets | BLOCKED | |
+| P4-10 | Database notifications | P4-05, P4-06 | messaging-engineer | app/Notifications, listeners | tests | BLOCKED | |
+| P4-11 | E2E flow + isolation + retention tests | P4-07..10 | qa-parity-engineer | tests/Feature/Phase4 | exit flow green | BLOCKED | |
+| P4-12 | Review council, ADR-0019/0020, docs, Gate C, merge | all | orchestrator | docs | Gate C | BLOCKED | |

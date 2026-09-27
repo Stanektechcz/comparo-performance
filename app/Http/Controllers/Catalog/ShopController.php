@@ -62,7 +62,7 @@ class ShopController extends Controller
             'shop' => [
                 'slug' => $shop->slug,
                 'name' => $shop->name,
-                'website' => $shop->website,
+                'website' => self::websiteUrl($shop->website),
                 'description' => $shop->description,
                 'verified' => $shop->isVerified(),
                 'returnDays' => $shop->return_days,
@@ -76,5 +76,21 @@ class ShopController extends Controller
             ],
             'products' => $products->summaries($listed, $market, now()->toImmutable()),
         ]);
+    }
+
+    /**
+     * L-1: the stored website is rendered as an href. Bare domains (the
+     * prototype stores e.g. `peaksupps.de`) become https URLs; anything that
+     * is not then an absolute http(s) URL (`javascript:`, `data:` …) is dropped.
+     */
+    private static function websiteUrl(?string $website): ?string
+    {
+        if ($website === null || trim($website) === '') {
+            return null;
+        }
+
+        $url = parse_url($website, PHP_URL_SCHEME) === null ? 'https://'.$website : $website;
+
+        return OfferComparisonPresenter::safeOutboundUrl($url);
     }
 }

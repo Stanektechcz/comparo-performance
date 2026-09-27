@@ -33,3 +33,4 @@ PostgreSQL run: see `docs/development/setup.md` → "Verifying against PostgreSQ
 with `denyWarnings` the single lint warning in the parity exporter made it exit 1. Fixed in `cd15292`; gate
 runs now record the exit code, not only the summary line.
 | 2026-09-26 | Phase 3 Gate C (search & discovery) | 1 803 (1 792 passed, 11 skipped: Meilisearch) | 9 675 (SQLite) / 9 672 (PostgreSQL) | 0 | green, all exit 0 | current (+ search) | 137/137 | no remote / CI never ran; Meilisearch contract never run against a real server |
+| 2026-09-26 | Phase 4 wave 1 (schema + pure engines: P4-00, P4-02, P4-03, P4-04) | 2 112 (2 101 passed, 11 skipped: Meilisearch) | 10 852 (SQLite) | 0 | green, `npm run check` exit 0 | current | 137/137 | remote + CI now exist (ran green on PR #1); Meilisearch also verified locally against a real server (contract dataset 48/48) |

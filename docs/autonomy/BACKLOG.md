@@ -64,3 +64,35 @@ Phase numbering follows the autonomous-orchestrator programme (2026-09-25). The 
 | F-16 | MINOR (privacy) | Search demand k-threshold sums daily sessions (hashes rotate daily), which is weaker than distinct sessions over the window | DPO sign-off with A-24/D-09 — RESOLVED (topQueries needs k distinct sessions on one day AND window sum ≥ k; DPO sign-off still pending) |
 | F-17 | MINOR | Indexing cost is products × active markets comparisons; outbox batch and reindex chunk sizes need load-testing before many markets go live | Phase 16 — RESOLVED (measured 2026-09-26: 4.6 ms per product×market, ~1 014 queries per 25-product chunk on SQLite; see phase-3-search.md §5) |
 | F-18 | MINOR (perf) | Search document snapshots run one offer comparison per product × market (~8 queries each) | reuse the bulk comparison path (compareMany, F-15) in ProductMarketSnapshot |
+| F-19 | MINOR | ComparoRank's stale-offer penalty (app/Domain/Offers/Ranking/RankingService) still reads a literal 48 h rather than the decided `comparo.offers.freshness.stale_hours` (D-25, ADR-0018 P4-00): the pure service's inputs (RankingContext) were out of this task's file scope, so wiring was left for a task that may touch app/Domain/Offers/Ranking | pass the configured threshold into RankingContext from the query layer (app/Domain/Offers/Queries), keeping the prototype value (48) as the default so parity fixtures stay byte-identical; verify with `node tools/prototype-parity/export-fixtures.mjs --check` |
+
+## Follow-ups discovered during audit (2026-09-26)
+
+| ID | Severity | Finding | Planned |
+|---|---|---|---|
+| F-20 | HIGH | 2FA is not enforced for staff, Horizon access or merchant owners (security H-2) | Audit 2026-09-26 — before production; Phase 19 (release gate) |
+| F-21 | HIGH | No production-safe bootstrap path exists beyond `RolesAndPermissionsSeeder`: no reference-data seeder for currencies, countries/markets (from `COMPARO_LAUNCH_MARKETS`) or categories, and no first-staff-user command | Audit 2026-09-26 — Phase 13/19 (production readiness) |
+| F-22 | HIGH | `market_price_stats` daily aggregation job does not exist for real data; `ProductPriceHistory`/`ProductHistoryMedians` read it, but only the demo importer writes it | Audit 2026-09-26 — Phase 16 (performance & scale) |
+| F-23 | HIGH | Merchant shipping zones are never written for real merchants; feed-level shipping is stored raw only (D-07) | Audit 2026-09-26 — Phase 7 (merchant portal) |
+| F-24 | HIGH | No compliance-rule management UI exists; a missing rule renders as `unknown` and suppresses the purchase link | Audit 2026-09-26 — Phase 8 (staff consoles) |
+| F-25 | HIGH | Real ECB FX rate import is not built (D-06); `exchange_rates` is demo data | Audit 2026-09-26 — Phase 16 (real-data readiness) |
+| F-26 | HIGH | No merchant onboarding/provisioning flow exists | Audit 2026-09-26 — Phase 7 (merchant portal) |
+| F-27 | HIGH | No backups or restore drill exist for the database/storage | Audit 2026-09-26 — Phase 18 (observability & operations) |
+| F-28 | HIGH | No error tracking or alerting vendor is wired up (needs vendor/account approval) | Audit 2026-09-26 — Phase 18 (observability & operations) |
+| F-29 | HIGH | No frontend unit or E2E test suite exists (Pest browser plugin or Playwright would need dependency approval) | Audit 2026-09-26 — Phase 17 (accessibility & UX hardening) |
+| F-30 | MEDIUM | CSP is not nonce-based (baseline security headers were added separately) | Audit 2026-09-26 — Phase 18/19 (security hardening) |
+| F-31 | MEDIUM | Public catalogue pages are unthrottled: Inertia JSON responses bypass the `public-api` rate limit | Audit 2026-09-26 — Phase 16 (performance & scale) |
+| F-32 | MEDIUM | Account erasure leaves receipt files/evidence behind, there is no data-export endpoint, and retention rows are missing for `users`/`orders`/`purchase_proofs`/`sessions` | Audit 2026-09-26 — Phase 13 (GDPR export/erase, pulled forward, ≤ Phase 15) |
+| F-33 | MEDIUM | `audit_logs` retains raw IP/user-agent without a decided retention period (D-09) | Audit 2026-09-26 — Phase 13 |
+| F-34 | MEDIUM | The scheduler is missing `horizon:snapshot`, `queue:prune-failed`, `queue:prune-batches`, `sanctum:prune-expired` and `auth:clear-resets` | Audit 2026-09-26 — Phase 18 (observability & operations) |
+| F-35 | MEDIUM | Only `/up` exists; there is no deep health check covering DB/Redis/Meilisearch/Horizon/SSR | Audit 2026-09-26 — Phase 18 (observability & operations) |
+| F-36 | MEDIUM | Commands `FeedsPrune`, `FeedsReapStalled`, `FeedsScheduleDue` and `VerifyPrototype` are untested | Audit 2026-09-26 — Phase 16 (performance & scale) |
+| F-37 | MEDIUM | No architecture test proves invariant #2 (compliance before serialization) holds across cache/index/notification surfaces, and none bans float usage for `Money` | Audit 2026-09-26 — Phase 16 |
+| F-38 | MEDIUM | Starter-kit leftovers remain: `/dashboard` placeholder page, sidebar links to the Laravel starter kit/docs, and a footer that claims affiliate links that do not exist yet | Audit 2026-09-26 — Phase 17 (accessibility & UX hardening) |
+| F-39 | MEDIUM | Legal pages (privacy, imprint, terms, cookies) and `robots.txt`/sitemap are absent | Audit 2026-09-26 — Phase 12 (content and SEO) |
+| F-40 | LOW | Sanctum tokens have no expiry or ability scoping decided before token issuance | Audit 2026-09-26 — Phase 10 (commercial, API tokens) |
+| F-41 | LOW | Feed source URLs are stored unencrypted | Audit 2026-09-26 — Phase 18 (observability & operations) |
+| F-42 | LOW | No password confirmation or re-verification is required on email change | Audit 2026-09-26 — Phase 13 |
+| F-43 | LOW | Security events (login, 2FA, passkeys, password change, account deletion) are not audited | Audit 2026-09-26 — Phase 13 |
+| F-44 | LOW | `PASSKEYS_USER_HANDLE_SECRET` is not required to be set in production | Audit 2026-09-26 — Phase 19 (release gate) |
+| F-45 | LOW | No explicit CORS configuration exists | Audit 2026-09-26 — Phase 19 (release gate) |

@@ -8,10 +8,10 @@ A new session resumes by reading `CLAUDE.md`, this file, `state.json` and
 
 | Item | Value |
 |---|---|
-| Phase | **4 — Reviews, orders & purchase verification** (starting; Phases 2 and 3 DONE at Gate C) |
-| Slice | Phase 4 analysis → design `docs/architecture/phase-4-reviews-orders.md` → task graph |
+| Phase | **4 — Reviews, orders & purchase verification** (IN PROGRESS — wave 1 done: P4-00, P4-02, P4-03, P4-04; wave 2 READY: P4-05, P4-06; Phases 2 and 3 DONE at Gate C) |
+| Slice | Phase 4 wave 1 landed (schema, pure engines with parity, platform foundations); next: reviews/verification domain actions (P4-05/P4-06) |
 | Branch | `main` includes Phases 2 + 3 (fast-forwarded after each Gate C); Phase 4 work happens on `phase-4/reviews-orders` |
-| Last green full gate | 2026-09-26 Phase 3 Gate C — Pest 1 803 tests (1 792 passed, 11 Meilisearch skipped) on SQLite (9 675 assertions) and PostgreSQL (9 672), Pint clean, Larastan L7 0 errors, parity current, `types:check` / `check` / `build:ssr` exit 0, prototype 137/137 |
+| Last green full gate | 2026-09-26 (after P4-02/P4-03) — Pest 2 112 tests (2 101 passed, 11 Meilisearch skipped), 10 852 assertions, SQLite; Larastan L7 0 errors; Pint clean; parity `--check` clean; `npm run check` exit 0; prototype 137/137 |
 | Next task | see `state.json → next_task` and [TASK-GRAPH.md](TASK-GRAPH.md) |
 
 ## Session start protocol
@@ -26,16 +26,20 @@ A new session resumes by reading `CLAUDE.md`, this file, `state.json` and
 Commit green work, update `state.json` + this file, append a dated entry to [HANDOFFS.md](HANDOFFS.md)
 with the exact next command/task, list only real external blockers.
 
-## Environment facts (verified 2026-09-25)
+## Environment facts (verified 2026-09-26)
 
 - Windows 10, PHP 8.4.16 at `C:\php` (not on PATH): bash `export PATH="/c/php:$PATH"`,
   PowerShell `$env:Path = "C:\php;$env:Path"`. Composer at `~/.claude/runtime/composer/composer.phar`.
-- Node 24, npm. Git 2.47 with a configured global identity; **no remote** → CI has never executed.
-- No Docker, no Redis, no Meilisearch, no system PostgreSQL. Tests use SQLite in-memory, database/array
-  drivers and Scout's collection driver. PostgreSQL verification uses `embedded-postgres` from the
-  session scratchpad (procedure in `docs/development/setup.md`).
+- Node 24, npm. Git 2.47 with a configured global identity and a remote,
+  `Stanektechcz/comparo-performance` (private); GitHub Actions CI (`.github/workflows/tests.yml`) exists
+  and ran green on PR #1 (merged to main).
+- Local Meilisearch binary used for real-server verification (engine contract dataset 48/48); no local
+  Docker, Redis, or system PostgreSQL. Tests use SQLite in-memory, database/array drivers and Scout's
+  collection driver by default. PostgreSQL verification uses `embedded-postgres` from the session
+  scratchpad (procedure in `docs/development/setup.md`).
 - Laravel 13.33, Inertia 3, React 19, Tailwind 4, Pest 4, Larastan level 7, Horizon (platform extensions
   faked in composer config for Windows).
+- Working tree clean at session end (2026-09-26).
 
 ## Working agreements
 

@@ -1,6 +1,8 @@
 # Route matrix
 
-Ground truth: `php artisan route:list -v --except-vendor` (2026-09-25, 53 routes). Vendor routes
+Ground truth: `php artisan route:list -v --except-vendor` (2026-09-26, 58 app routes: 56 reported by
+`--except-vendor`, plus `dashboard` and `appearance.edit`, which `route:list` misclassifies as vendor
+because their controller is `Inertia\Controller`). Vendor routes
 (Fortify auth, Horizon, Telescope, health, dev-tools) are excluded. "Auth" is the middleware stack
 after `web`/`api`; "Permission/policy" is the specific gate beyond authentication; "Market context" says
 whether `ResolveMarket` applies (all public/catalog routes do via the global `web` group — see
@@ -30,8 +32,10 @@ Inertia page's meta defaults, not a per-route override system (none exists yet).
 | Method | Path | Name | Surface | Auth | Permission/policy | Market context | SEO | Status |
 |---|---|---|---|---|---|---|---|---|
 | ANY | `/settings` | (redirect) | auth | `auth` | — | no | noindex | FUNCTIONAL |
+| GET | `/dashboard` | `dashboard` | auth | `auth`,`verified` | — | no | noindex | FUNCTIONAL (starter-kit placeholder page, see BACKLOG.md) |
 | GET/PATCH/DELETE | `/settings/profile` | `profile.*` | auth | `auth` (+`verified` on delete) | own profile only | no | noindex | FUNCTIONAL |
 | GET | `/settings/security` | `security.edit` | auth | `auth`,`verified`,`password.confirm` | own account only | no | noindex | FUNCTIONAL |
+| GET | `/settings/appearance` | `appearance.edit` | auth | `auth`,`verified` | own account only | no | noindex | FUNCTIONAL |
 | PUT | `/settings/password` | `user-password.update` | auth | `auth`,`verified` (`throttle:6,1`) | own account only | no | noindex | FUNCTIONAL |
 
 ## Merchant portal (`/merchant/*`)

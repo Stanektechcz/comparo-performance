@@ -1,21 +1,14 @@
 {
-    "updated_at": "2026-09-26",
+    "updated_at": "2026-09-27",
     "current_phase": "phase-4",
-    "current_slice": "reviews-orders-verification",
+    "current_slice": "Phase 4 wave 1 done; staging environment (A-39) live locally + CI release candidate; readiness audit",
     "branch": "phase-4/reviews-orders",
     "baseline_commit": "fe8c42b",
-    "last_completed_task": "Open items closed: decisions ADR-0018, backlog F-01..F-17 (F-14 deferred), Meilisearch real-server compat, CI connected (PR #1)",
-    "next_task": "PR #1 CI green -> merge; P4-00 apply ADR-0018 config/feature flags; P4-01 Phase 4 analyses",
+    "last_completed_task": "Staging + audit: A-39, tools/staging, tools/deploy, staging.yml, security fixes 6f80e0d, docs/audit/2026-09-26-readiness-audit.md",
+    "next_task": "Watch PR #2 CI (Auto-fix on); then F-21 production reference-data seeder + first staff user, or Phase 4 wave 2 (P4-05 + P4-06); see audit section 7",
     "blocked_tasks": [],
     "active_agents": [],
-    "last_full_test_result": {
-        "date": "2026-09-26",
-        "driver": "sqlite + pgsql 18 (embedded)",
-        "tests": 1868,
-        "passed": 1857,
-        "skipped": 11,
-        "result": "passed"
-    },
+    "last_full_test_result": "2026-09-26: Pest 2 174 tests (2 163 passed, 11 skipped), SQLite; CI staging release candidate PASSED (smoke 26/26, composer/npm audit 0)",
     "static_analysis": {
         "pint": "passed",
         "larastan_level": 7,

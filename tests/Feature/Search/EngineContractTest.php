@@ -369,16 +369,16 @@ it('waits for write tasks and surfaces failed tasks', function () {
 });
 
 /*
- * Engine selection: the local engine scans every document per query, so a
- * production environment must run Meilisearch.
+ * Engine selection: the local engine scans every document per query, so
+ * production and staging (A-39) must run Meilisearch.
  */
 
-it('refuses the full-scan local engine in production', function (string $driver) {
-    app()->detectEnvironment(static fn (): string => 'production');
+it('refuses the full-scan local engine in production and staging', function (string $environment, string $driver) {
+    app()->detectEnvironment(static fn (): string => $environment);
     config(['scout.driver' => $driver]);
 
-    expect(fn () => app(SearchEngine::class))->toThrow(RuntimeException::class, 'production');
-})->with(['collection', 'database', 'null', 'empty' => ['']]);
+    expect(fn () => app(SearchEngine::class))->toThrow(RuntimeException::class, 'production and staging');
+})->with(['production', 'staging'])->with(['collection', 'database', 'null', 'empty' => ['']]);
 
 it('binds Meilisearch in production and the local engine outside it', function () {
     fakeMeilisearch();

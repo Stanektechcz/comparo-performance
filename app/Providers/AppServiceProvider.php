@@ -49,6 +49,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -92,6 +93,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureUrls();
         $this->configureRateLimiting();
         $this->invalidateCatalogCacheOnChange();
         $this->registerDomainListeners();
@@ -193,7 +195,9 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
+        // A-39: staging enforces the production password policy (real sign-up
+        // flows are tested there) but stays resettable (no destructive-command ban).
+        Password::defaults(fn (): ?Password => app()->environment('production', 'staging')
             ? Password::min(12)
                 ->mixedCase()
                 ->letters()
@@ -202,6 +206,24 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null,
         );
+    }
+
+    /**
+     * H-1: on the hosted environments every generated URL (password reset,
+     * email verification, signed links) is built from APP_URL, never from the
+     * request's Host header or scheme. TrustHosts rejects foreign hosts too.
+     */
+    protected function configureUrls(): void
+    {
+        $appUrl = rtrim((string) config('app.url'), '/');
+        $scheme = parse_url($appUrl, PHP_URL_SCHEME);
+
+        if (! $this->app->environment('production', 'staging') || ! is_string($scheme)) {
+            return;
+        }
+
+        URL::forceRootUrl($appUrl);
+        URL::forceScheme($scheme);
     }
 
     protected function configureRateLimiting(): void

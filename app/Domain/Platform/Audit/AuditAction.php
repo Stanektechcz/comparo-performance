@@ -27,4 +27,26 @@ enum AuditAction: string
 
     case ProductCandidateProposed = 'product_candidate.proposed';
     case ProductCandidateResolved = 'product_candidate.resolved';
+
+    // Phase 4: reviews, purchase verification and orders
+    // (docs/architecture/phase-4-reviews-orders.md).
+    case ReviewSubmitted = 'review.submitted';
+    case ReviewModerated = 'review.moderated';
+    case ReviewWithdrawn = 'review.withdrawn';
+    case ReviewReported = 'review.reported';
+    case ReviewReplyPosted = 'review.reply_posted';
+    case ReviewReplyEdited = 'review.reply_edited';
+    case ReviewReplyRemoved = 'review.reply_removed';
+
+    case PurchaseProofSubmitted = 'purchase_proof.submitted';
+    case PurchaseProofDecided = 'purchase_proof.decided';
+    case PurchaseProofReceiptViewed = 'purchase_proof.receipt_viewed';
+    case PurchaseProofReceiptPurged = 'purchase_proof.receipt_purged';
+
+    case OrderCreatedFromEvidence = 'order.created_from_evidence';
+    case OrderDeliveryReported = 'order.delivery_reported';
+    case OrderReturnOpened = 'order.return_opened';
+    case OrderDisputeOpened = 'order.dispute_opened';
+
+    case ReportDecided = 'report.decided';
 }

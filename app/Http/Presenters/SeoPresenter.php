@@ -4,6 +4,7 @@ namespace App\Http\Presenters;
 
 use App\Domain\Shared\Money;
 use App\Models\Product;
+use App\Models\RatingAggregate;
 
 /**
  * Server-owned SEO head (title, description, canonical, robots, hreflang,
@@ -60,11 +61,7 @@ final class SeoPresenter
             'sku' => $product->reference,
             'url' => $canonical,
             'offers' => $this->aggregateOffer($offers),
-            'aggregateRating' => $product->rating_count > 0 && $product->weighted_rating !== null ? [
-                '@type' => 'AggregateRating',
-                'ratingValue' => (string) $product->weighted_rating,
-                'reviewCount' => $product->rating_count,
-            ] : null,
+            'aggregateRating' => $this->aggregateRating($product),
         ], static fn (mixed $value): bool => $value !== null);
 
         return $this->page(
@@ -94,6 +91,28 @@ final class SeoPresenter
                 'name' => $item[0],
                 'item' => $item[1],
             ], $items, array_keys($items)),
+        ];
+    }
+
+    /**
+     * A-31/A-37: only a real rating (aggregated from approved reviews, never
+     * an imported demo or manual one) with at least the minimum number of
+     * reviews is published as structured data.
+     *
+     * @return array{'@type': string, ratingValue: string, reviewCount: int}|null
+     */
+    private function aggregateRating(Product $product): ?array
+    {
+        if ($product->rating_source !== RatingAggregate::SOURCE_AGGREGATED
+            || $product->weighted_rating === null
+            || $product->rating_count < (int) config('comparo.thresholds.rating_min_reviews')) {
+            return null;
+        }
+
+        return [
+            '@type' => 'AggregateRating',
+            'ratingValue' => (string) $product->weighted_rating,
+            'reviewCount' => $product->rating_count,
         ];
     }
 

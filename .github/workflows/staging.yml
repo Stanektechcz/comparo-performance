@@ -1,0 +1,208 @@
+name: Staging release candidate
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  release-candidate:
+    name: Staging release candidate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: comparo_staging
+          POSTGRES_USER: comparo_staging
+          POSTGRES_PASSWORD: comparo_staging
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U comparo_staging -d comparo_staging"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      # MEILI_ENV=production requires a master key >= 16 bytes. It is generated
+      # as a throwaway value in the "Generate CI secrets" step below (not a
+      # repository secret) and passed to this service container.
+      meilisearch:
+        image: getmeili/meilisearch:v1.53.2
+        env:
+          MEILI_MASTER_KEY: staging-ci-throwaway-master-key-0000
+          MEILI_ENV: production
+          MEILI_NO_ANALYTICS: 'true'
+        ports:
+          - 7700:7700
+
+    env:
+      APP_URL: http://127.0.0.1:8000
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: comparo_staging
+      DB_USERNAME: comparo_staging
+      DB_PASSWORD: comparo_staging
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      MEILISEARCH_HOST: http://127.0.0.1:7700
+      MEILISEARCH_KEY: staging-ci-throwaway-master-key-0000
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, bcmath, intl, pcntl, posix
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install PHP dependencies (no-dev, as deployed)
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+
+      - name: Generate CI-only secrets
+        id: secrets
+        run: |
+          echo "demo_password=$(openssl rand -hex 16)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare staging-like environment
+        env:
+          DEMO_PASSWORD: ${{ steps.secrets.outputs.demo_password }}
+        run: |
+          cp .env.staging.example .env
+          {
+            echo "APP_URL=${APP_URL}"
+            echo "SESSION_SECURE_COOKIE=false"
+            echo "DB_CONNECTION=pgsql"
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_PORT=5432"
+            echo "DB_DATABASE=comparo_staging"
+            echo "DB_USERNAME=comparo_staging"
+            echo "DB_PASSWORD=comparo_staging"
+            echo "REDIS_HOST=127.0.0.1"
+            echo "REDIS_PORT=6379"
+            echo "REDIS_PASSWORD="
+            echo "MEILISEARCH_HOST=http://127.0.0.1:7700"
+            echo "MEILISEARCH_KEY=staging-ci-throwaway-master-key-0000"
+            echo "COMPARO_DEMO_ACCOUNTS=true"
+            echo "COMPARO_DEMO_PASSWORD=${DEMO_PASSWORD}"
+            echo "MAIL_MAILER=log"
+          } >> .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build (client + SSR; Wayfinder routes generated during this build)
+        run: npm run build:ssr
+
+      - name: Migrate database
+        run: php artisan migrate --force
+
+      - name: Seed database (roles always; demo data — COMPARO_DEMO_ACCOUNTS=true)
+        run: php artisan db:seed --force
+
+      - name: Optimize caches
+        run: php artisan optimize
+
+      - name: Sync search index settings
+        run: php artisan comparo:search:sync-settings
+
+      - name: Reindex search (synchronous — comparo:search:reindex does not queue)
+        run: php artisan comparo:search:reindex
+
+      - name: Start web, SSR and Horizon in the background
+        run: |
+          mkdir -p storage/logs
+          nohup php artisan serve --host=127.0.0.1 --port=8000 > storage/logs/ci-serve.log 2>&1 &
+          echo $! > /tmp/serve.pid
+          nohup php artisan inertia:start-ssr > storage/logs/ci-ssr.log 2>&1 &
+          echo $! > /tmp/ssr.pid
+          nohup php artisan horizon > storage/logs/ci-horizon.log 2>&1 &
+          echo $! > /tmp/horizon.pid
+
+      - name: Wait for /up
+        run: |
+          for attempt in $(seq 1 30); do
+            curl -fsS "${APP_URL}/up" && exit 0
+            sleep 2
+          done
+          echo "App did not become healthy at ${APP_URL}/up" >&2
+          exit 1
+
+      - name: Verify Horizon is running
+        run: |
+          for attempt in $(seq 1 15); do
+            status="$(php artisan horizon:status || true)"
+            echo "$status"
+            echo "$status" | grep -qi 'running' && exit 0
+            sleep 2
+          done
+          echo "Horizon did not report running" >&2
+          exit 1
+
+      - name: Smoke test
+        env:
+          SMOKE_EMAIL: merchant@comparo.example
+          SMOKE_PASSWORD: ${{ steps.secrets.outputs.demo_password }}
+          SMOKE_AFTER_LOGIN: /merchant/feeds
+        run: node tools/staging/smoke.mjs "${APP_URL}"
+
+      - name: composer audit (report only)
+        continue-on-error: true
+        run: composer audit --no-dev
+
+      - name: npm audit (report only)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Stop background processes
+        if: always()
+        run: |
+          for pidfile in /tmp/serve.pid /tmp/ssr.pid /tmp/horizon.pid; do
+            [ -f "$pidfile" ] && kill "$(cat "$pidfile")" 2>/dev/null || true
+          done
+
+      - name: Upload logs on failure
+        if: failure()
+        # NOTE: tests.yml pins actions/checkout and setup-* by commit SHA; this
+        # action isn't used there, and its SHA could not be verified offline,
+        # so it is pinned by version tag instead. Update to a SHA pin when
+        # verifiable (see docs/operations/staging.md known limitations).
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-ci-logs
+          path: |
+            storage/logs/**
+          if-no-files-found: warn
+          retention-days: 7

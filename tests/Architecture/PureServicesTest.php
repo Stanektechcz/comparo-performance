@@ -33,6 +33,10 @@ foreach ([
     'App\Domain\Search\Local',
     'App\Domain\Search\DidYouMean',
     'App\Domain\Search\DidYouMeanSuggestion',
+    'App\Domain\Reviews\Credibility',
+    'App\Domain\Reviews\Aggregation',
+    'App\Domain\Reviews\Abuse',
+    'App\Domain\Orders\Delivery',
 ] as $pureNamespace) {
     arch("{$pureNamespace} does not touch the database, facades, the clock or randomness")
         ->expect($pureNamespace)
@@ -93,6 +97,31 @@ arch('scoring results and inputs are immutable')
         'App\Domain\Search\Local\LocalQueryEvaluator',
         'App\Domain\Search\DidYouMean',
         'App\Domain\Search\DidYouMeanSuggestion',
+        'App\Domain\Reviews\Credibility\CredibilityPolicy',
+        'App\Domain\Reviews\Credibility\ReviewTrustInput',
+        'App\Domain\Reviews\Credibility\ReviewTrust',
+        'App\Domain\Reviews\Credibility\ReviewTrustSignal',
+        'App\Domain\Reviews\Credibility\ReviewTrustCalculator',
+        'App\Domain\Reviews\Credibility\ReviewWeight',
+        'App\Domain\Reviews\Aggregation\RatingInput',
+        'App\Domain\Reviews\Aggregation\RatingAggregate',
+        'App\Domain\Reviews\Aggregation\RatingAggregator',
+        'App\Domain\Reviews\Abuse\TextHeuristics',
+        'App\Domain\Reviews\Abuse\TextSignal',
+        'App\Domain\Reviews\Abuse\ClusteredReview',
+        'App\Domain\Reviews\Abuse\SimilarReview',
+        'App\Domain\Reviews\Abuse\DuplicateCluster',
+        'App\Domain\Reviews\Abuse\DuplicateClusterDetector',
+        'App\Domain\Reviews\Abuse\DatedRating',
+        'App\Domain\Reviews\Abuse\BurstReport',
+        'App\Domain\Reviews\Abuse\BurstDetector',
+        'App\Domain\Reviews\Abuse\RatingSpike',
+        'App\Domain\Reviews\Abuse\ManipulationReport',
+        'App\Domain\Reviews\Abuse\ManipulationDetector',
+        'App\Domain\Orders\Delivery\DeliveryObservation',
+        'App\Domain\Orders\Delivery\DeliveryPolicy',
+        'App\Domain\Orders\Delivery\DeliveryStats',
+        'App\Domain\Orders\Delivery\DeliveryStatsCalculator',
     ])
     ->toBeReadonly();
 
