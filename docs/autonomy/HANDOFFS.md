@@ -3,6 +3,23 @@
 Newest first. Each entry states where work stopped and the exact next step, so a new session can
 continue without reconstructing context.
 
+## 2026-09-27 (merged) - PR #2 in main, production runbook verified, next tracks
+
+- PR #2 merged into `main` with a merge commit (`bd6206c`) so the SHAs cited in docs stay valid. CI was green
+  on all four checks (pgsql flake fixed in 6ac925d: unordered `pluck` in `RejectedPairMemoryTest`).
+- `docs/operations/aapanel-production.md` checked against the code: `/home/www` must be owned by `www`
+  (`npm ci` cache), toolchain check under `sudo -u www`, Meilisearch master key in a 600 config file instead
+  of the command line, production skips `db:seed`, first super-admin via register + tinker (command verified
+  on a throwaway SQLite DB: role assigned, email verified, Horizon gate passes).
+- Production (`APP_ENV=production`) deploys but stays empty until track R1. Proposed order:
+  - **R1 production bootstrap:** F-21 (`comparo:reference:seed`, `comparo:staff:create`), F-24 compliance
+    rules, F-26 merchant onboarding, F-23 shipping zones, F-22 price stats job, F-25 ECB FX, F-38 starter leftovers.
+    Exit: fresh production DB, no demo data, one merchant onboarded end-to-end, smoke 26/26.
+  - **R2 security + operations:** F-20, F-34, F-35, F-27 (+ restore drill), F-28 (vendor), F-31, F-44, F-45, F-30.
+  - **R3 legal minimum:** F-39, F-32, F-33, F-42, F-43 + DPO/legal sign-off (ADR-0018) → closed pilot.
+  - **R4 product:** Phase 4 wave 2 (P4-05, P4-06 → P4-12), Phase 5 `/go`, F-29 frontend tests (needs approval).
+- **Next:** R1 / F-21 on a branch from `main`.
+
 ## 2026-09-27 - Staging running, readiness audit, security fixes (PR #2 draft)
 
 - Commits on `phase-4/reviews-orders`: 314e80d P4-02, f183300 P4-03, 6e00460 A-39 staging + tools/staging,
